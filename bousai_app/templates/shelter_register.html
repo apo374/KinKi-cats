@@ -18,6 +18,15 @@
     <label for="name">避難所名（必須）</label><br>
     <input type="text" id="name" name="name">
   </p>
+  <p>
+    <label for="latitude">緯度（任意）</label><br>
+    <input type="number" id="latitude" name="latitude" step="any" min="-90" max="90" placeholder="例: 40.8222">
+  </p>
+  <p>
+    <label for="longitude">経度（任意）</label><br>
+    <input type="number" id="longitude" name="longitude" step="any" min="-180" max="180" placeholder="例: 140.7474">
+  </p>
+  <p>緯度・経度を入力すると、ホーム画面の地図に表示されます。</p>
   <p><button type="submit">登録</button></p>
 </form>
 {% endblock %}

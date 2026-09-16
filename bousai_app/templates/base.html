@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <header class="app-header">
     <div class="header-inner">
       <a class="brand" href="{{ url_for('index') }}">防災アプリ</a>
