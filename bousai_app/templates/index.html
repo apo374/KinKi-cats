@@ -1,26 +1,92 @@
 {% extends "base.html" %}
 
 {% block title %}ホーム | 防災アプリ{% endblock %}
+{% block body_class %}home-screen{% endblock %}
 
 {% block content %}
-<section class="home-section" aria-labelledby="map-title">
-    <h1 id="map-title" class="section-heading">
-        <span class="heading-label"><span class="heading-icon" aria-hidden="true">📍</span>避難所マップ</span>
-    </h1>
-    <div class="map-frame">
-        <div id="shelterMap"></div>
+<div class="home-dashboard">
+    <div class="home-header">
+        <h1 class="home-title">青森市の防災情報</h1>
+        <form class="home-refresh-form" action="{{ url_for('index') }}" method="get">
+            <button class="home-refresh-button" type="submit" name="refresh" value="1" aria-label="画面全体を更新">全体更新</button>
+        </form>
     </div>
-</section>
 
-<section class="home-section" aria-labelledby="weather-title">
-    <h2 id="weather-title" class="section-heading">
-        <span class="heading-label"><span class="heading-icon" aria-hidden="true">☁</span>青森市 気象警報・注意報</span>
-        <span class="weather-refresh"><span class="refresh-icon" aria-hidden="true">↻</span>10分おき自動更新</span>
-    </h2>
-    <div id="weatherContent" class="weather-panel" aria-live="polite">
-        <p>読み込み中...</p>
+    <div id="emergencyBanner" class="home-emergency" role="alert" hidden>
+        <span class="home-emergency-label">緊急情報</span>
+        <strong id="emergencyText"></strong>
+        <a href="#weather-title">詳細を確認</a>
     </div>
-</section>
+
+    <div class="home-main">
+        <div class="home-summary">
+            <section class="home-section home-weather" aria-labelledby="weather-title">
+                <div class="home-section-header">
+                    <div class="weather-heading">
+                        <h2 id="weather-title" class="section-heading">
+                            <span class="heading-label"><span class="heading-icon" aria-hidden="true">☁</span>気象警報・注意報</span>
+                        </h2>
+                        <span class="weather-refresh"><span class="refresh-icon" aria-hidden="true">↻</span>10分ごとに自動更新</span>
+                    </div>
+                </div>
+                <p id="weatherUpdateStatus" class="weather-update-status" role="status" aria-live="polite"></p>
+                <div id="weatherContent" class="weather-panel" aria-live="polite">
+                    <p class="weather-loading">気象情報を読み込んでいます...</p>
+                </div>
+            </section>
+
+            {% set active_notices = resident_notices | rejectattr('status', 'equalto', '解除') | rejectattr('status', 'equalto', '完了') | list %}
+            <section class="home-section home-notices" aria-labelledby="notices-title">
+                <div class="home-section-header">
+                    <h2 id="notices-title" class="section-heading">
+                        <span class="heading-label"><span class="heading-icon" aria-hidden="true">📢</span>住民向けのお知らせ</span>
+                    </h2>
+                </div>
+                {% if active_notices %}
+                <ul class="notice-list">
+                    {% for notice in active_notices %}
+                    <li class="notice-item">
+                        <p class="notice-text">{{ notice.content }}</p>
+                        {% if notice.shelter %}<p class="notice-detail">避難先: {{ notice.shelter }}</p>{% endif %}
+                        {% if notice.updated_at or notice.created_at %}<p class="notice-date">{{ notice.updated_at or notice.created_at }} 更新</p>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="notice-empty">現在有効な住民向けのお知らせはありません。</p>
+                {% endif %}
+            </section>
+        </div>
+
+        <section class="home-section home-map" aria-labelledby="map-title">
+            <div class="home-section-header">
+                <h2 id="map-title" class="section-heading">
+                    <span class="heading-label"><span class="heading-icon" aria-hidden="true">📍</span>青森市周辺マップ</span>
+                </h2>
+            </div>
+            <div class="map-frame">
+                <div id="shelterMap" role="region" aria-label="青森市周辺の地図"></div>
+                <p id="mapFallback" class="map-fallback" hidden>地図を表示できませんでした。避難所は一覧から確認できます。</p>
+                <form id="mapSearchForm" class="map-search-form" role="search">
+                    <label class="visually-hidden" for="mapSearchInput">市が登録した地名・名称を検索</label>
+                    <input id="mapSearchInput" type="search" placeholder="登録地名・名称" autocomplete="off">
+                    <button type="submit" aria-label="地図を検索">検索</button>
+                </form>
+                <ul id="mapSearchResults" class="map-search-results" aria-live="polite" hidden></ul>
+                <div class="map-filter-row" aria-label="地図の表示切り替え">
+                    <label><input id="showShelters" type="checkbox" checked> <span class="map-key map-key-shelter" aria-hidden="true"></span>避難所</label>
+                    <label><input id="showDamage" type="checkbox" checked> <span class="map-key map-key-damage" aria-hidden="true"></span>被害</label>
+                    <button id="mapLocateButton" type="button">現在地</button>
+                </div>
+            </div>
+            <p id="mapDataStatus" class="map-data-status" role="status" aria-live="polite">登録情報を読み込んでいます...</p>
+            <div class="map-controls">
+                <a class="map-list-link" href="{{ url_for('all_shelters') }}">避難所一覧 <span aria-hidden="true">→</span></a>
+                <button id="mapExpandButton" class="map-expand-button" type="button" aria-controls="shelterMap" aria-expanded="false">地図を拡大</button>
+            </div>
+        </section>
+    </div>
+</div>
 
 <!-- Leaflet の読み込み -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -28,34 +94,57 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // 地図の初期化（青森市周辺を中心に設定）
-    const map = L.map('shelterMap').setView([40.8222, 140.7474], 12);
+    const weatherContent = document.getElementById('weatherContent');
+    const weatherUpdateStatus = document.getElementById('weatherUpdateStatus');
+    const initialForceRefresh = new URLSearchParams(window.location.search).get('refresh') === '1';
+    let weatherRequestInProgress = false;
+    let hasWeatherData = false;
 
-    // OpenStreetMapタイルを追加
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        referrerPolicy: 'strict-origin-when-cross-origin'
-    }).addTo(map);
+    function updateWeatherWarnings(forceRefresh = false) {
+        if (weatherRequestInProgress) return;
+        weatherRequestInProgress = true;
+        weatherContent.setAttribute('aria-busy', 'true');
+        weatherUpdateStatus.textContent = forceRefresh ? '気象情報を確認しています...' : '';
 
-    // 気象警報・注意報の自動更新機能
-    function updateWeatherWarnings() {
-        fetch('/api/weather_warnings')
-            .then(response => response.json())
+        fetch(forceRefresh ? '/api/weather_warnings?refresh=1' : '/api/weather_warnings', { cache: 'no-store' })
+            .then(response => {
+                if (!response.ok) throw new Error('気象情報の取得に失敗しました');
+                return response.json();
+            })
             .then(data => {
-                console.log('気象情報を更新しました:', data);
+                if (data.error) throw new Error('気象情報の取得に失敗しました');
                 updateWeatherContent(data);
+                hasWeatherData = true;
+                weatherUpdateStatus.textContent = forceRefresh ? '気象情報を確認しました。' : '';
             })
             .catch(error => {
                 console.error('気象情報の更新に失敗しました:', error);
+                if (hasWeatherData) {
+                    weatherUpdateStatus.textContent = '更新できませんでした。表示中の情報は前回取得分です。';
+                } else {
+                    showWeatherError();
+                    weatherUpdateStatus.textContent = '';
+                }
+            })
+            .finally(() => {
+                weatherRequestInProgress = false;
+                weatherContent.removeAttribute('aria-busy');
             });
     }
 
-    function updateWeatherContent(data) {
-        const weatherContent = document.getElementById('weatherContent');
+    function showWeatherError() {
+        weatherContent.innerHTML = '<p class="weather-error">気象情報を取得できませんでした。画面上部の「全体更新」から再試行できます。</p>';
+    }
 
-        if (data.error) {
-            weatherContent.innerHTML = '<p class="weather-alert">気象情報の取得に失敗しました</p>';
-            return;
+    function updateWeatherContent(data) {
+        const emergencyCodes = new Set(['32', '33', '35', '36', '37', '38', '39', '43', '48', '49']);
+        const emergencyWarnings = (data.warnings || []).filter(warning => emergencyCodes.has(String(warning.code)));
+        const emergencyBanner = document.getElementById('emergencyBanner');
+        if (emergencyWarnings.length > 0) {
+            document.getElementById('emergencyText').textContent = `${data.area_name || '青森市'}：${emergencyWarnings.map(warning => warning.name).join('、')}`;
+            emergencyBanner.hidden = false;
+        } else {
+            emergencyBanner.hidden = true;
         }
 
         let warningsHtml = '';
@@ -77,9 +166,172 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
     }
 
-    // 初回表示＋10分（600,000ミリ秒）おきに自動更新
-    updateWeatherWarnings();
+    updateWeatherWarnings(initialForceRefresh);
     setInterval(updateWeatherWarnings, 600000);
+
+    const mapElement = document.getElementById('shelterMap');
+    const mapFallback = document.getElementById('mapFallback');
+    const mapExpandButton = document.getElementById('mapExpandButton');
+    const mapDataStatus = document.getElementById('mapDataStatus');
+    const mapSearchForm = document.getElementById('mapSearchForm');
+    const mapSearchInput = document.getElementById('mapSearchInput');
+    const mapSearchResults = document.getElementById('mapSearchResults');
+    const showShelters = document.getElementById('showShelters');
+    const showDamage = document.getElementById('showDamage');
+    const mapLocateButton = document.getElementById('mapLocateButton');
+    if (window.L) {
+        const map = L.map(mapElement).setView([40.8222, 140.7474], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            referrerPolicy: 'strict-origin-when-cross-origin'
+        }).addTo(map);
+        const shelterLayer = L.layerGroup().addTo(map);
+        const damageLayer = L.layerGroup().addTo(map);
+        let mapEntries = [];
+        let currentLocationLayer;
+
+        function addPopup(marker, heading, placeName, detail, updatedAt) {
+            const content = document.createElement('div');
+            const title = document.createElement('strong');
+            title.textContent = heading;
+            content.appendChild(title);
+            if (placeName) {
+                const place = document.createElement('p');
+                place.textContent = placeName;
+                content.appendChild(place);
+            }
+            if (detail) {
+                const paragraph = document.createElement('p');
+                paragraph.textContent = detail;
+                content.appendChild(paragraph);
+            }
+            if (updatedAt) {
+                const time = document.createElement('small');
+                time.textContent = `${updatedAt} 更新`;
+                content.appendChild(time);
+            }
+            marker.bindPopup(content);
+        }
+
+        function drawMapData(data) {
+            shelterLayer.clearLayers();
+            damageLayer.clearLayers();
+            mapEntries = [];
+            const shelters = Array.isArray(data.shelters) ? data.shelters : [];
+            const reports = Array.isArray(data.damage_reports) ? data.damage_reports : [];
+            shelters.forEach(shelter => {
+                const marker = L.circleMarker([shelter.latitude, shelter.longitude], {
+                    radius: 9, color: '#145a97', fillColor: '#327dc2', fillOpacity: 0.95, weight: 2
+                }).addTo(shelterLayer);
+                addPopup(marker, `避難所：${shelter.name}`, shelter.place_name);
+                mapEntries.push({type: 'shelter', label: shelter.name, placeName: shelter.place_name || '', marker});
+            });
+            reports.forEach(report => {
+                const marker = L.circleMarker([report.latitude, report.longitude], {
+                    radius: 10, color: '#9e302a', fillColor: '#d54a40', fillOpacity: 0.95, weight: 2
+                }).addTo(damageLayer);
+                addPopup(marker, `被害：${report.title}`, report.place_name, report.description, report.updated_at);
+                mapEntries.push({type: 'damage', label: report.title, placeName: report.place_name || '', marker});
+            });
+            if (!showShelters.checked) map.removeLayer(shelterLayer);
+            if (!showDamage.checked) map.removeLayer(damageLayer);
+            mapDataStatus.textContent = `避難所 ${shelters.length} 件・発生中の被害 ${reports.length} 件。表示のない場所も安全とは限りません。`;
+            if (mapSearchInput.value.trim()) searchMap();
+        }
+
+        function updateMapData() {
+            fetch('{{ url_for('api_map_data') }}', {cache: 'no-store'})
+                .then(response => {
+                    if (!response.ok) throw new Error('地図情報の取得に失敗しました');
+                    return response.json();
+                })
+                .then(drawMapData)
+                .catch(error => {
+                    console.error(error);
+                    mapDataStatus.textContent = '登録情報を更新できませんでした。「全体更新」から再試行してください。';
+                });
+        }
+
+        function searchMap() {
+            const query = mapSearchInput.value.trim().toLocaleLowerCase('ja');
+            mapSearchResults.replaceChildren();
+            mapSearchResults.hidden = !query;
+            if (!query) return;
+            const matches = mapEntries.filter(entry =>
+                (entry.type === 'shelter' ? showShelters.checked : showDamage.checked) &&
+                `${entry.placeName} ${entry.label}`.toLocaleLowerCase('ja').includes(query)
+            );
+            if (!matches.length) {
+                const item = document.createElement('li');
+                item.textContent = '表示中の登録情報に一致するものはありません。';
+                mapSearchResults.appendChild(item);
+                return;
+            }
+            matches.forEach(entry => {
+                const item = document.createElement('li');
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.textContent = `${entry.placeName ? `${entry.placeName}・` : ''}${entry.label}`;
+                button.addEventListener('click', () => {
+                    map.setView(entry.marker.getLatLng(), Math.max(map.getZoom(), 15));
+                    entry.marker.openPopup();
+                    mapSearchResults.hidden = true;
+                    mapElement.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+                });
+                item.appendChild(button);
+                mapSearchResults.appendChild(item);
+            });
+        }
+
+        mapSearchForm.addEventListener('submit', event => {
+            event.preventDefault();
+            searchMap();
+        });
+        [[showShelters, shelterLayer], [showDamage, damageLayer]].forEach(([input, layer]) => {
+            input.addEventListener('change', () => {
+                if (input.checked) layer.addTo(map);
+                else map.removeLayer(layer);
+                if (mapSearchInput.value.trim()) searchMap();
+            });
+        });
+        mapLocateButton.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                mapDataStatus.textContent = 'このブラウザーでは現在地を取得できません。';
+                return;
+            }
+            mapLocateButton.disabled = true;
+            mapDataStatus.textContent = '現在地を確認しています...';
+            navigator.geolocation.getCurrentPosition(position => {
+                const point = [position.coords.latitude, position.coords.longitude];
+                if (currentLocationLayer) currentLocationLayer.remove();
+                currentLocationLayer = L.layerGroup([
+                    L.circle(point, {radius: position.coords.accuracy, color: '#2363ab', fillOpacity: 0.08, weight: 1}),
+                    L.circleMarker(point, {radius: 8, color: '#fff', fillColor: '#2363ab', fillOpacity: 1, weight: 3}).bindPopup('現在地（おおよその位置）')
+                ]).addTo(map);
+                map.setView(point, 15);
+                mapDataStatus.textContent = '現在地を表示しました。位置には誤差があります。';
+                mapLocateButton.disabled = false;
+            }, () => {
+                mapDataStatus.textContent = '現在地を取得できませんでした。位置情報の許可や端末の設定をご確認ください。';
+                mapLocateButton.disabled = false;
+            }, {enableHighAccuracy: true, timeout: 10000});
+        });
+        updateMapData();
+        setInterval(updateMapData, 600000);
+        mapExpandButton.addEventListener('click', () => {
+            const expanded = document.querySelector('.home-map').classList.toggle('is-expanded');
+            mapExpandButton.setAttribute('aria-expanded', String(expanded));
+            mapExpandButton.textContent = expanded ? '元に戻す' : '地図を拡大';
+            requestAnimationFrame(() => map.invalidateSize());
+        });
+    } else {
+        mapElement.hidden = true;
+        mapFallback.hidden = false;
+        mapExpandButton.hidden = true;
+        mapSearchForm.hidden = true;
+        document.querySelector('.map-filter-row').hidden = true;
+        mapDataStatus.textContent = '地図を表示できませんでした。';
+    }
 });
 </script>
 {% endblock %}

@@ -6,27 +6,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <header class="app-header">
     <div class="header-inner">
       <a class="brand" href="{{ url_for('index') }}">防災アプリ</a>
-      <button class="menu-button" type="button" aria-label="メニューを開く" aria-expanded="false" aria-controls="menuPanel">
-        <span class="menu-icon" aria-hidden="true"></span>
-      </button>
+      <nav class="primary-nav" aria-label="主要メニュー">
+        <a href="{{ url_for('index') }}"{% if request.endpoint == 'index' %} aria-current="page"{% endif %}>ホーム</a>
+        <a href="{{ url_for('shelter_search') }}"{% if request.endpoint in ('shelter_search', 'all_shelters', 'search_results') %} aria-current="page"{% endif %}>避難所を探す</a>
+      </nav>
+      {% if session.logged_in %}
+        <button class="menu-button" type="button" aria-expanded="false" aria-controls="adminMenu">
+          管理者メニュー <span aria-hidden="true">▾</span>
+        </button>
+        <nav id="adminMenu" class="admin-nav" aria-label="管理者メニュー">
+          <a href="{{ url_for('shelter_register') }}"{% if request.endpoint == 'shelter_register' %} aria-current="page"{% endif %}>避難所登録</a>
+          <a href="{{ url_for('board') }}"{% if request.endpoint == 'board' %} aria-current="page"{% endif %}>指示・発信ボード</a>
+          <a href="{{ url_for('logout') }}">ログアウト</a>
+        </nav>
+      {% else %}
+        <a class="admin-login-link" href="{{ url_for('login') }}">管理者ログイン</a>
+      {% endif %}
     </div>
   </header>
-
-  <nav id="menuPanel" class="menu-panel" aria-label="メインメニュー">
-    <a href="{{ url_for('index') }}">ホーム</a>
-    <a href="{{ url_for('shelter_search') }}">避難所検索</a>
-    <a href="{{ url_for('shelter_register') }}">避難所登録</a>
-    <a href="{{ url_for('board') }}">指示・発信ボード</a>
-    {% if session.logged_in %}
-      <a href="{{ url_for('logout') }}">ログアウト</a>
-    {% else %}
-      <a href="{{ url_for('login') }}">管理者ログイン</a>
-    {% endif %}
-  </nav>
 
   <main class="page-content">
     {% block content %}{% endblock %}
@@ -34,13 +35,26 @@
 
   <script>
     const menuButton = document.querySelector('.menu-button');
-    const menuPanel = document.querySelector('#menuPanel');
-
-    menuButton.addEventListener('click', () => {
-      const isOpen = menuPanel.classList.toggle('is-open');
-      menuButton.setAttribute('aria-expanded', String(isOpen));
-      menuButton.setAttribute('aria-label', isOpen ? 'メニューを閉じる' : 'メニューを開く');
-    });
+    const adminMenu = document.querySelector('#adminMenu');
+    if (menuButton && adminMenu) {
+      menuButton.addEventListener('click', () => {
+        const isOpen = adminMenu.classList.toggle('is-open');
+        menuButton.setAttribute('aria-expanded', String(isOpen));
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && adminMenu.classList.contains('is-open')) {
+          adminMenu.classList.remove('is-open');
+          menuButton.setAttribute('aria-expanded', 'false');
+          menuButton.focus();
+        }
+      });
+      document.addEventListener('click', (event) => {
+        if (!menuButton.contains(event.target) && !adminMenu.contains(event.target)) {
+          adminMenu.classList.remove('is-open');
+          menuButton.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
   </script>
 </body>
 </html>

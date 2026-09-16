@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, render_template, session, redirect, u
 from urllib.parse import urlparse, urljoin
 from functools import wraps
 import json
+import math
 import os
 import time
 import urllib.request
@@ -85,6 +86,8 @@ WARNING_CODES = {
 # ────────────────────────────────
 # サンプルデータの読み込み
 DATA_FILE = os.path.join(APP_DIR, 'data', 'shelters.json')
+# ホームの地図が参照する被害情報。登録処理は発信ボード側で実装する。
+DAMAGE_FILE = os.path.join(APP_DIR, 'data', 'damage_reports.json')
 INSTRUCTIONS_FILE = os.path.join(APP_DIR, 'data', 'instructions.json')
 
 def load_json(path, default):
@@ -111,6 +114,16 @@ def save_shelters():
     """避難所データをファイルに保存する"""
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(shelters, f, ensure_ascii=False, indent=2)
+
+
+def has_valid_coordinates(item):
+    try:
+        latitude = float(item['latitude'])
+        longitude = float(item['longitude'])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return (math.isfinite(latitude) and math.isfinite(longitude)
+            and -90 <= latitude <= 90 and -180 <= longitude <= 180)
 # ────────────────────────────────
 
 # ────────────────────────────────
@@ -218,12 +231,12 @@ def parse_area_warnings(warning_data):
     return warnings, latest_datetime.isoformat()
 
 
-def get_weather_warnings():
+def get_weather_warnings(force_refresh=False):
     """対象市区町村の警報・注意報を取得する"""
     global _weather_cache, _weather_cache_at
 
     now = time.monotonic()
-    if _weather_cache is not None and now - _weather_cache_at < WEATHER_CACHE_SECONDS:
+    if not force_refresh and _weather_cache is not None and now - _weather_cache_at < WEATHER_CACHE_SECONDS:
         return _weather_cache
 
     try:
@@ -256,7 +269,9 @@ def get_weather_warnings():
 # トップページ：templates/index.html を返す（住民向け指示も表示する）
 @app.route('/')
 def index():
-    resident_notices = [i for i in instructions if i.get('target') == '住民']
+    resident_notices = [
+        i for i in load_json(INSTRUCTIONS_FILE, []) if i.get('target') == '住民'
+    ]
     return render_template('index.html', resident_notices=resident_notices)
 
 # ログインページ
@@ -366,11 +381,49 @@ def get_shelters():
     # 見つかったらリストを JSON で返す
     return jsonify(results)
 
+
+@app.route('/api/map_data')
+def api_map_data():
+    """ホーム用の読み取りAPI。
+
+    発信ボード側から受け取る被害情報は damage_reports.json の配列を想定する。
+    地図に必要な項目は title, latitude, longitude, status（発生中/解消）。
+    place_name, description, updated_at は任意。
+    避難所は shelters.json の name, latitude, longitude を参照し、place_name は任意。
+    """
+    try:
+        with open(DATA_FILE, encoding='utf-8') as f:
+            current_shelters = json.load(f)
+        with open(DAMAGE_FILE, encoding='utf-8') as f:
+            current_reports = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return jsonify({'error': '登録情報を読み込めませんでした'}), 503
+    if not isinstance(current_shelters, list) or not isinstance(current_reports, list):
+        return jsonify({'error': '登録情報の形式が正しくありません'}), 503
+    mapped_shelters = [
+        {'id': item.get('id'), 'name': item.get('name', ''),
+         'place_name': item.get('place_name', ''),
+         'latitude': float(item['latitude']), 'longitude': float(item['longitude'])}
+        for item in current_shelters if isinstance(item, dict) and has_valid_coordinates(item)
+    ]
+    active_reports = [
+        {'id': item.get('id'), 'title': item.get('title', ''),
+         'description': item.get('description', ''),
+         'place_name': item.get('place_name', ''),
+         'latitude': float(item['latitude']), 'longitude': float(item['longitude']),
+         'updated_at': item.get('updated_at', '')}
+        for item in current_reports
+        if isinstance(item, dict) and item.get('status') == '発生中' and has_valid_coordinates(item)
+    ]
+    response = jsonify({'shelters': mapped_shelters, 'damage_reports': active_reports})
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
 # 気象警報・注意報API
 @app.route('/api/weather_warnings')
 def api_weather_warnings():
     """気象警報・注意報をJSON形式で返すAPI"""
-    return jsonify(get_weather_warnings())
+    return jsonify(get_weather_warnings(force_refresh=request.args.get('refresh') == '1'))
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
