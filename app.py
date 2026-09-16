@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request, render_template, session, redirect, url_for
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, quote
 from functools import wraps
 import json
 import math
@@ -86,8 +86,6 @@ WARNING_CODES = {
 # ────────────────────────────────
 # サンプルデータの読み込み
 DATA_FILE = os.path.join(APP_DIR, 'data', 'shelters.json')
-# ホームの地図が参照する被害情報。登録処理は発信ボード側で実装する。
-DAMAGE_FILE = os.path.join(APP_DIR, 'data', 'damage_reports.json')
 INSTRUCTIONS_FILE = os.path.join(APP_DIR, 'data', 'instructions.json')
 
 def load_json(path, default):
@@ -100,6 +98,7 @@ def load_json(path, default):
 
 shelters = load_json(DATA_FILE, [])
 instructions = load_json(INSTRUCTIONS_FILE, [])
+_geocode_cache = {}
 
 def save_instructions():
     """指示ボードのデータをファイルに保存する"""
@@ -116,14 +115,6 @@ def save_shelters():
         json.dump(shelters, f, ensure_ascii=False, indent=2)
 
 
-def has_valid_coordinates(item):
-    try:
-        latitude = float(item['latitude'])
-        longitude = float(item['longitude'])
-    except (KeyError, TypeError, ValueError):
-        return False
-    return (math.isfinite(latitude) and math.isfinite(longitude)
-            and -90 <= latitude <= 90 and -180 <= longitude <= 180)
 # ────────────────────────────────
 
 # ────────────────────────────────
@@ -165,6 +156,99 @@ def format_report_time(iso_str):
 def filter_shelters(district=None):
     """district 指定があれば一致する避難所のみ、なければ全件を返す"""
     return [s for s in shelters if not district or s.get('district') == district]
+
+
+def is_valid_coordinate(latitude, longitude):
+    """緯度・経度が地図に描画できる数値か確認する"""
+    try:
+        latitude = float(latitude)
+        longitude = float(longitude)
+    except (TypeError, ValueError):
+        return False
+    return (math.isfinite(latitude) and math.isfinite(longitude)
+            and -90 <= latitude <= 90 and -180 <= longitude <= 180)
+
+
+def get_map_data():
+    """地図に描画可能な避難所と被害・発信情報を返す"""
+    current_shelters = load_json(DATA_FILE, [])
+    current_instructions = load_json(INSTRUCTIONS_FILE, [])
+    map_shelters = [
+        {
+            'id': shelter.get('id'),
+            'name': shelter.get('name', '名称未設定'),
+            'place_name': shelter.get('place_name', ''),
+            'latitude': float(shelter['latitude']),
+            'longitude': float(shelter['longitude']),
+            'status': shelter.get('status', '利用状況不明')
+        }
+        for shelter in current_shelters
+        if isinstance(shelter, dict)
+        if is_valid_coordinate(shelter.get('latitude'), shelter.get('longitude'))
+    ]
+    incidents = [
+        {
+            'id': notice.get('id'),
+            'title': notice.get('content', '発信情報'),
+            'shelter': notice.get('shelter', ''),
+            'status': notice.get('status', ''),
+            'place_name': notice.get('place_name', ''),
+            'updated_at': notice.get('updated_at', ''),
+            'latitude': float(notice['latitude']),
+            'longitude': float(notice['longitude'])
+        }
+        for notice in current_instructions
+        if isinstance(notice, dict) and notice.get('target') == '住民'
+        if is_valid_coordinate(notice.get('latitude'), notice.get('longitude'))
+        and notice.get('status') not in ('解除', '完了')
+    ]
+    return {'shelters': map_shelters, 'incidents': incidents}
+
+
+@app.route('/api/map_data')
+def api_map_data():
+    response = jsonify(get_map_data())
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.route('/api/geocode')
+def api_geocode():
+    """住所検索を気象庁以外の外部サービスへ中継する"""
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify({'error': '検索語を入力してください。'}), 400
+    if len(query) > 100:
+        return jsonify({'error': '検索語が長すぎます。'}), 400
+
+    if query in _geocode_cache:
+        return jsonify(_geocode_cache[query])
+
+    url = (
+        'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=ja&q='
+        + quote(query)
+    )
+    try:
+        request_obj = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'bousai-app/1.0 contact: local-development'}
+        )
+        with urllib.request.urlopen(request_obj, timeout=8) as response:
+            results = json.loads(response.read())
+        locations = [
+            {
+                'name': result.get('display_name', query),
+                'latitude': float(result['lat']),
+                'longitude': float(result['lon'])
+            }
+            for result in results
+            if is_valid_coordinate(result.get('lat'), result.get('lon'))
+        ]
+        payload = {'results': locations}
+        _geocode_cache[query] = payload
+        return jsonify(payload)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return jsonify({'error': '場所を検索できませんでした。'}), 502
 
 
 def parse_area_warnings(warning_data):
@@ -325,8 +409,22 @@ def shelter_register():
                 message='避難所名を入力してください。'
             )
 
+        latitude_value = request.form.get('latitude', '').strip()
+        longitude_value = request.form.get('longitude', '').strip()
+        if latitude_value or longitude_value:
+            if not is_valid_coordinate(latitude_value, longitude_value):
+                return render_template(
+                    'shelter_register.html',
+                    error=True,
+                    message='緯度・経度は正しい数値で入力してください。'
+                )
+
         next_id = max((shelter.get('id', 0) for shelter in shelters), default=0) + 1
-        shelters.append({'id': next_id, 'name': name})
+        shelter = {'id': next_id, 'name': name}
+        if latitude_value and longitude_value:
+            shelter['latitude'] = float(latitude_value)
+            shelter['longitude'] = float(longitude_value)
+        shelters.append(shelter)
         try:
             save_shelters()
         except OSError:
@@ -381,43 +479,6 @@ def get_shelters():
     # 見つかったらリストを JSON で返す
     return jsonify(results)
 
-
-@app.route('/api/map_data')
-def api_map_data():
-    """ホーム用の読み取りAPI。
-
-    発信ボード側から受け取る被害情報は damage_reports.json の配列を想定する。
-    地図に必要な項目は title, latitude, longitude, status（発生中/解消）。
-    place_name, description, updated_at は任意。
-    避難所は shelters.json の name, latitude, longitude を参照し、place_name は任意。
-    """
-    try:
-        with open(DATA_FILE, encoding='utf-8') as f:
-            current_shelters = json.load(f)
-        with open(DAMAGE_FILE, encoding='utf-8') as f:
-            current_reports = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return jsonify({'error': '登録情報を読み込めませんでした'}), 503
-    if not isinstance(current_shelters, list) or not isinstance(current_reports, list):
-        return jsonify({'error': '登録情報の形式が正しくありません'}), 503
-    mapped_shelters = [
-        {'id': item.get('id'), 'name': item.get('name', ''),
-         'place_name': item.get('place_name', ''),
-         'latitude': float(item['latitude']), 'longitude': float(item['longitude'])}
-        for item in current_shelters if isinstance(item, dict) and has_valid_coordinates(item)
-    ]
-    active_reports = [
-        {'id': item.get('id'), 'title': item.get('title', ''),
-         'description': item.get('description', ''),
-         'place_name': item.get('place_name', ''),
-         'latitude': float(item['latitude']), 'longitude': float(item['longitude']),
-         'updated_at': item.get('updated_at', '')}
-        for item in current_reports
-        if isinstance(item, dict) and item.get('status') == '発生中' and has_valid_coordinates(item)
-    ]
-    response = jsonify({'shelters': mapped_shelters, 'damage_reports': active_reports})
-    response.headers['Cache-Control'] = 'no-store'
-    return response
 
 # 気象警報・注意報API
 @app.route('/api/weather_warnings')

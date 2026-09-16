@@ -12,6 +12,15 @@
         </form>
     </div>
 
+    {% set urgent_notices = resident_notices | selectattr('status', 'equalto', '発令中') | list %}
+    {% if urgent_notices %}
+    <div class="home-emergency" role="alert">
+        <span class="home-emergency-label">市からの緊急情報</span>
+        <strong>{{ urgent_notices[0].content }}</strong>
+        <a href="#notices-title">お知らせを確認</a>
+    </div>
+    {% endif %}
+
     <div id="emergencyBanner" class="home-emergency" role="alert" hidden>
         <span class="home-emergency-label">緊急情報</span>
         <strong id="emergencyText"></strong>
@@ -75,7 +84,7 @@
                 <ul id="mapSearchResults" class="map-search-results" aria-live="polite" hidden></ul>
                 <div class="map-filter-row" aria-label="地図の表示切り替え">
                     <label><input id="showShelters" type="checkbox" checked> <span class="map-key map-key-shelter" aria-hidden="true"></span>避難所</label>
-                    <label><input id="showDamage" type="checkbox" checked> <span class="map-key map-key-damage" aria-hidden="true"></span>被害</label>
+                    <label><input id="showIncidents" type="checkbox" checked> <span class="map-key map-key-damage" aria-hidden="true"></span>被害・発信</label>
                     <button id="mapLocateButton" type="button">現在地</button>
                 </div>
             </div>
@@ -177,7 +186,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const mapSearchInput = document.getElementById('mapSearchInput');
     const mapSearchResults = document.getElementById('mapSearchResults');
     const showShelters = document.getElementById('showShelters');
-    const showDamage = document.getElementById('showDamage');
+    const showIncidents = document.getElementById('showIncidents');
     const mapLocateButton = document.getElementById('mapLocateButton');
     if (window.L) {
         const map = L.map(mapElement).setView([40.8222, 140.7474], 12);
@@ -186,7 +195,7 @@ document.addEventListener('DOMContentLoaded', function() {
             referrerPolicy: 'strict-origin-when-cross-origin'
         }).addTo(map);
         const shelterLayer = L.layerGroup().addTo(map);
-        const damageLayer = L.layerGroup().addTo(map);
+        const incidentLayer = L.layerGroup().addTo(map);
         let mapEntries = [];
         let currentLocationLayer;
 
@@ -215,10 +224,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function drawMapData(data) {
             shelterLayer.clearLayers();
-            damageLayer.clearLayers();
+            incidentLayer.clearLayers();
             mapEntries = [];
             const shelters = Array.isArray(data.shelters) ? data.shelters : [];
-            const reports = Array.isArray(data.damage_reports) ? data.damage_reports : [];
+            const reports = Array.isArray(data.incidents) ? data.incidents : [];
             shelters.forEach(shelter => {
                 const marker = L.circleMarker([shelter.latitude, shelter.longitude], {
                     radius: 9, color: '#145a97', fillColor: '#327dc2', fillOpacity: 0.95, weight: 2
@@ -229,13 +238,13 @@ document.addEventListener('DOMContentLoaded', function() {
             reports.forEach(report => {
                 const marker = L.circleMarker([report.latitude, report.longitude], {
                     radius: 10, color: '#9e302a', fillColor: '#d54a40', fillOpacity: 0.95, weight: 2
-                }).addTo(damageLayer);
-                addPopup(marker, `被害：${report.title}`, report.place_name, report.description, report.updated_at);
-                mapEntries.push({type: 'damage', label: report.title, placeName: report.place_name || '', marker});
+                }).addTo(incidentLayer);
+                addPopup(marker, `被害・発信：${report.title}`, report.place_name, report.status, report.updated_at);
+                mapEntries.push({type: 'incident', label: report.title, placeName: report.place_name || '', marker});
             });
             if (!showShelters.checked) map.removeLayer(shelterLayer);
-            if (!showDamage.checked) map.removeLayer(damageLayer);
-            mapDataStatus.textContent = `避難所 ${shelters.length} 件・発生中の被害 ${reports.length} 件。表示のない場所も安全とは限りません。`;
+            if (!showIncidents.checked) map.removeLayer(incidentLayer);
+            mapDataStatus.textContent = `避難所 ${shelters.length} 件・被害・発信 ${reports.length} 件。表示のない場所も安全とは限りません。`;
             if (mapSearchInput.value.trim()) searchMap();
         }
 
@@ -258,7 +267,7 @@ document.addEventListener('DOMContentLoaded', function() {
             mapSearchResults.hidden = !query;
             if (!query) return;
             const matches = mapEntries.filter(entry =>
-                (entry.type === 'shelter' ? showShelters.checked : showDamage.checked) &&
+                (entry.type === 'shelter' ? showShelters.checked : showIncidents.checked) &&
                 `${entry.placeName} ${entry.label}`.toLocaleLowerCase('ja').includes(query)
             );
             if (!matches.length) {
@@ -287,7 +296,7 @@ document.addEventListener('DOMContentLoaded', function() {
             event.preventDefault();
             searchMap();
         });
-        [[showShelters, shelterLayer], [showDamage, damageLayer]].forEach(([input, layer]) => {
+        [[showShelters, shelterLayer], [showIncidents, incidentLayer]].forEach(([input, layer]) => {
             input.addEventListener('change', () => {
                 if (input.checked) layer.addTo(map);
                 else map.removeLayer(layer);
