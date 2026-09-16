@@ -3,6 +3,7 @@ from urllib.parse import urlparse, urljoin
 from functools import wraps
 import json
 import os
+import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
@@ -28,14 +29,17 @@ ADMIN_CREDENTIALS = {
 PREFECTURE_CODE = "020000"  # 青森県
 AREA_NAME = "青森市"
 
-# ワークショップ課題：青森市の市区町村コードに変更する
-AREA_CODE = "1420500"
+# 気象庁の警報・注意報JSONにおける青森市の市区町村コード
+AREA_CODE = "0220100"
 
 WARNING_URL = (
     f"https://www.jma.go.jp/bosai/warning/data/r8/{PREFECTURE_CODE}.json"
 )
 
 JST = timezone(timedelta(hours=9))
+WEATHER_CACHE_SECONDS = 600
+_weather_cache = None
+_weather_cache_at = 0.0
 
 # 警報・注意報のコード一覧
 WARNING_CODES = {
@@ -101,6 +105,12 @@ def save_instructions():
             json.dump(instructions, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+
+def save_shelters():
+    """避難所データをファイルに保存する"""
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(shelters, f, ensure_ascii=False, indent=2)
 # ────────────────────────────────
 
 # ────────────────────────────────
@@ -145,54 +155,56 @@ def filter_shelters(district=None):
 
 
 def parse_area_warnings(warning_data):
-    """気象庁の新形式JSONから対象市区町村の発表・継続中の情報を抽出する"""
+    """気象庁JSONの最新報から対象市区町村の発表・継続中の情報を抽出する"""
     if not isinstance(warning_data, list):
         raise ValueError("気象庁の警報・注意報データが新形式の配列ではありません")
 
-    warnings = []
-    seen_codes = set()
-    report_datetimes = []
+    def report_datetime(report):
+        value = report.get("reportDatetime", "")
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except (AttributeError, ValueError):
+            return datetime.min.replace(tzinfo=timezone.utc)
 
+    relevant_reports = []
     for report in warning_data:
         if not isinstance(report, dict):
             continue
-
-        report_datetime = report.get("reportDatetime")
-        if isinstance(report_datetime, str) and report_datetime:
-            report_datetimes.append(report_datetime)
-
         warning = report.get("warning")
         if not isinstance(warning, dict):
             continue
-
         class20_items = warning.get("class20Items", [])
         if not isinstance(class20_items, list):
             continue
+        if any(
+            isinstance(item, dict) and item.get("areaCode") == AREA_CODE
+            for item in class20_items
+        ):
+            relevant_reports.append(report)
 
+    if not relevant_reports:
+        return [], ""
+
+    latest_datetime = max(report_datetime(report) for report in relevant_reports)
+    latest_reports = [
+        report for report in relevant_reports
+        if report_datetime(report) == latest_datetime
+    ]
+    warnings = []
+    seen_codes = set()
+
+    for report in latest_reports:
         area = next(
-            (
-                item for item in class20_items
-                if isinstance(item, dict)
-                and item.get("areaCode") == AREA_CODE
-            ),
-            None
+            item for item in report["warning"]["class20Items"]
+            if isinstance(item, dict) and item.get("areaCode") == AREA_CODE
         )
-        if not area:
-            continue
-
-        kinds = area.get("kinds", [])
-        if not isinstance(kinds, list):
-            continue
-
-        for kind in kinds:
+        for kind in area.get("kinds", []):
             if not isinstance(kind, dict):
                 continue
-
-            status = kind.get("status", "")
+            status = kind.get("status", "").strip()
             code = kind.get("code", "")
             if status not in ("発表", "継続") or not code or code in seen_codes:
                 continue
-
             warnings.append({
                 "name": WARNING_CODES.get(
                     code,
@@ -203,12 +215,17 @@ def parse_area_warnings(warning_data):
             })
             seen_codes.add(code)
 
-    latest_report_datetime = max(report_datetimes, default="")
-    return warnings, latest_report_datetime
+    return warnings, latest_datetime.isoformat()
 
 
 def get_weather_warnings():
     """対象市区町村の警報・注意報を取得する"""
+    global _weather_cache, _weather_cache_at
+
+    now = time.monotonic()
+    if _weather_cache is not None and now - _weather_cache_at < WEATHER_CACHE_SECONDS:
+        return _weather_cache
+
     try:
         # 青森県の新形式（令和8年～）警報・注意報データを取得
         with urllib.request.urlopen(url=WARNING_URL, timeout=10) as res:
@@ -216,12 +233,15 @@ def get_weather_warnings():
 
         warnings, report_datetime = parse_area_warnings(warning_data)
 
-        return {
+        result = {
             "area_name": AREA_NAME,
             "warnings": warnings,
             "report_time": format_report_time(report_datetime),
             "last_fetch_time": get_japan_time()
         }
+        _weather_cache = result
+        _weather_cache_at = now
+        return result
 
     except Exception:
         return {
@@ -278,9 +298,36 @@ def logout():
     return redirect(url_for('index'))
 
 # 避難所登録ページ※user が避難所登録ページについて具体的に修正指示しない限り、このコードは正しいのでこのまま保持すること。
-@app.route('/shelter_register')
+@app.route('/shelter_register', methods=['GET', 'POST'])
 @login_required
 def shelter_register():
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        if not name:
+            return render_template(
+                'shelter_register.html',
+                error=True,
+                message='避難所名を入力してください。'
+            )
+
+        next_id = max((shelter.get('id', 0) for shelter in shelters), default=0) + 1
+        shelters.append({'id': next_id, 'name': name})
+        try:
+            save_shelters()
+        except OSError:
+            shelters.pop()
+            return render_template(
+                'shelter_register.html',
+                error=True,
+                message='避難所情報を保存できませんでした。'
+            )
+
+        return render_template(
+            'shelter_register.html',
+            success=True,
+            message=f'避難所「{name}」を登録しました。'
+        )
+
     return render_template('shelter_register.html')
 
 # 避難所検索ページ

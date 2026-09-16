@@ -1,0 +1,325 @@
+:root {
+  --blue: #2f5eae;
+  --blue-dark: #234d98;
+  --text: #263b5c;
+  --muted: #61718a;
+  --green: #2aa14a;
+  --surface: #ffffff;
+  --soft: #f6f8fb;
+  --line: #e8edf4;
+  --shadow: 0 10px 30px rgba(42, 73, 125, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: #f8fafc;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 72%);
+  font-family: "Noto Sans JP", "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif;
+  line-height: 1.6;
+}
+
+.app-header {
+  height: 70px;
+  color: #fff;
+  background: linear-gradient(110deg, var(--blue-dark), var(--blue));
+  box-shadow: 0 2px 10px rgba(30, 65, 125, 0.15);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100% - 40px, 1380px);
+  height: 100%;
+  margin: 0 auto;
+}
+
+.brand {
+  color: #fff;
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.menu-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  place-items: center;
+  color: #fff;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.menu-button:hover,
+.menu-button:focus-visible {
+  background: rgba(255, 255, 255, 0.14);
+  outline: none;
+}
+
+.menu-icon,
+.menu-icon::before,
+.menu-icon::after {
+  display: block;
+  width: 23px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 2px;
+}
+
+.menu-icon {
+  position: relative;
+}
+
+.menu-icon::before,
+.menu-icon::after {
+  position: absolute;
+  left: 0;
+  content: "";
+}
+
+.menu-icon::before {
+  top: -8px;
+}
+
+.menu-icon::after {
+  top: 8px;
+}
+
+.menu-panel {
+  position: absolute;
+  top: 70px;
+  right: max(20px, calc((100vw - 1380px) / 2));
+  z-index: 1000;
+  display: none;
+  width: 220px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 0 0 10px 10px;
+  box-shadow: var(--shadow);
+}
+
+.menu-panel.is-open {
+  display: grid;
+}
+
+.menu-panel a {
+  padding: 10px 12px;
+  color: var(--text);
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+.menu-panel a:hover,
+.menu-panel a:focus-visible {
+  color: var(--blue);
+  background: #f0f5ff;
+  outline: none;
+}
+
+.page-content {
+  width: min(100% - 40px, 920px);
+  margin: 32px auto 70px;
+}
+
+.home-section {
+  padding: 27px 28px 30px;
+  margin-bottom: 34px;
+  background: var(--surface);
+  border: 1px solid rgba(225, 232, 242, 0.55);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 18px;
+  color: var(--blue-dark);
+  font-size: 24px;
+  line-height: 1.35;
+}
+
+.section-heading::before {
+  content: "";
+  width: 7px;
+  height: 26px;
+  flex: 0 0 auto;
+  background: var(--blue);
+  border-radius: 4px;
+}
+
+.heading-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+}
+
+.heading-icon {
+  font-size: 23px;
+}
+
+.map-frame {
+  height: 364px;
+  overflow: hidden;
+  border-radius: 11px;
+  background: #dcecf0;
+}
+
+#shelterMap {
+  width: 100%;
+  height: 100%;
+}
+
+.weather-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--green);
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.refresh-icon {
+  font-size: 23px;
+  line-height: 1;
+}
+
+.weather-panel {
+  padding: 20px 19px 17px;
+  background: var(--soft);
+  border-radius: 10px;
+}
+
+.weather-location,
+.weather-status,
+.weather-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weather-location {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.weather-status {
+  margin: 0 0 14px;
+  color: var(--green);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.status-icon {
+  display: inline-grid;
+  width: 21px;
+  height: 21px;
+  color: #fff;
+  background: var(--green);
+  border-radius: 50%;
+  place-items: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.weather-meta {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.weather-alert {
+  color: #bd3c36;
+}
+
+.leaflet-control-zoom a {
+  color: #222 !important;
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    height: 62px;
+  }
+
+  .header-inner {
+    width: min(100% - 28px, 1380px);
+  }
+
+  .brand {
+    font-size: 22px;
+  }
+
+  .menu-panel {
+    top: 62px;
+    right: 14px;
+  }
+
+  .page-content {
+    width: min(100% - 24px, 920px);
+    margin-top: 20px;
+  }
+
+  .home-section {
+    padding: 21px 16px 18px;
+    margin-bottom: 20px;
+    border-radius: 12px;
+  }
+
+  .section-heading {
+    align-items: flex-start;
+    font-size: 19px;
+  }
+
+  .section-heading::before {
+    width: 5px;
+    height: 22px;
+  }
+
+  .heading-label {
+    gap: 7px;
+  }
+
+  .heading-icon {
+    font-size: 19px;
+  }
+
+  .weather-refresh {
+    font-size: 13px;
+  }
+
+  .refresh-icon {
+    font-size: 18px;
+  }
+
+  .map-frame {
+    height: 280px;
+  }
+
+  .weather-panel {
+    padding: 16px 14px;
+  }
+
+  .weather-status {
+    font-size: 16px;
+  }
+}
