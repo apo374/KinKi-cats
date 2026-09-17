@@ -45,7 +45,7 @@
       </table>
     </div>
   {% else %}
-    <div class="board-empty">表示するデータはありません</div>
+    <div class="board-empty">現在、被害登録はされていないです。</div>
   {% endif %}
 
   <h2 class="board-heading">③ 避難指示</h2>
@@ -105,6 +105,34 @@
   {% else %}
     <div class="board-empty">表示するデータはありません</div>
   {% endif %}
+
+  <h2 class="board-heading">⑤ 避難所利用登録状況</h2>
+  {% if registered_shelters %}
+    <div class="board-table-wrap">
+      <table class="board-table">
+        <thead>
+          <tr>
+            <th>避難所名</th>
+            <th>残り収容可能人数</th>
+            <th>残り割合</th>
+            <th>空き状況</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for shelter in registered_shelters %}
+            <tr>
+              <td>{{ shelter.name }}</td>
+              <td>{{ shelter.remaining_capacity }}人</td>
+              <td>{{ '%.1f'|format(shelter.remaining_ratio) }}%</td>
+              <td>{{ shelter.availability }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="board-empty">利用登録された避難所はありません</div>
+  {% endif %}
 </section>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -112,14 +140,34 @@
 <script>
   const mapCenter = {{ map_center | tojson }};
   const damagePoints = {{ damage_map_points | tojson }};
-  const boardMap = L.map('boardMap', { zoomControl: true }).setView(mapCenter, 11);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(boardMap);
+  if (window.L) {
+    const boardMap = L.map('boardMap', { zoomControl: true }).setView(mapCenter, 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(boardMap);
 
-  damagePoints.forEach((point) => {
-    const marker = L.marker([point.latitude, point.longitude]).addTo(boardMap);
-    marker.bindPopup(`<strong>${point.location}</strong><br>${point.content}<br>状況: ${point.status}<br>発生日時: ${point.datetime}`);
-  });
+    damagePoints.forEach((point) => {
+      const marker = L.circleMarker([point.latitude, point.longitude], {
+        radius: 8,
+        color: '#9f2d2d',
+        fillColor: '#d64545',
+        fillOpacity: 0.9,
+        weight: 2
+      }).addTo(boardMap);
+      const popup = document.createElement('div');
+      [
+        ['strong', point.location],
+        ['span', point.content],
+        ['span', `状況: ${point.status}`],
+        ['span', `発生日時: ${point.datetime}`]
+      ].forEach(([tagName, text], index) => {
+        const line = document.createElement(tagName);
+        line.textContent = text;
+        popup.appendChild(line);
+        if (index < 3) popup.appendChild(document.createElement('br'));
+      });
+      marker.bindPopup(popup);
+    });
+  }
 </script>
 {% endblock %}

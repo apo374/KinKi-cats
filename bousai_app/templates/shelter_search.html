@@ -8,7 +8,7 @@
 	<form action="{{ url_for('search_results') }}" method="get" class="management-form shelter-search-form">
 		<div class="form-grid">
 			<div class="field-group">
-				<label for="building-name">建物名</label>
+				<label for="building-name">避難所の建物名</label>
 				<input id="building-name" type="text" name="building_name" placeholder="例：青森市民会館" value="{{ request.args.get('building_name', request.args.get('name', '')) }}">
 			</div>
 
@@ -21,7 +21,7 @@
 			</div>
 
 			<div class="field-group full-width">
-				<label for="address-input">住所</label>
+				<label for="address-input">住所(現在地でも避難所でも可)</label>
 				<input type="text" name="address" id="address-input" placeholder="例：〇〇市〇〇町" value="{{ request.args.get('address', '') }}">
 			</div>
 
@@ -57,7 +57,7 @@
 			<button type="submit" class="primary-button">検索する</button>
 			<button type="button" class="secondary-button" id="location-button">現在地を取得</button>
 			<span id="location-status" role="status" aria-live="polite"></span>
-			<a class="link-button" href="{{ url_for('all_shelters') }}">全施設一覧</a>
+			<a class="link-button" id="all-shelters-link" href="{{ url_for('all_shelters') }}">全施設一覧</a>
 		</div>
 	</form>
 </section>
@@ -73,6 +73,7 @@
 		const longitudeInput = document.getElementById('current-lng');
 		const searchForm = document.querySelector('.shelter-search-form');
 		const searchButton = searchForm ? searchForm.querySelector('button[type="submit"]') : null;
+		const allSheltersLink = document.getElementById('all-shelters-link');
 		const locationOptions = { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 };
 
 		const getCurrentPosition = (onSuccess, onFailure) => {
@@ -145,6 +146,30 @@
 				}, (message) => {
 					locationStatus.textContent = message + '通常検索を実行します。';
 					searchForm.submit();
+				});
+			});
+		}
+
+		if (allSheltersLink && locationStatus) {
+			allSheltersLink.addEventListener('click', (event) => {
+				event.preventDefault();
+				const navigateToShelters = (latitude, longitude) => {
+					const params = new URLSearchParams({
+						current_lat: String(latitude),
+						current_lng: String(longitude)
+					});
+					window.location.assign(`${allSheltersLink.href}?${params.toString()}`);
+				};
+				if (latitudeInput.value && longitudeInput.value) {
+					navigateToShelters(latitudeInput.value, longitudeInput.value);
+					return;
+				}
+				allSheltersLink.setAttribute('aria-disabled', 'true');
+				locationStatus.textContent = '現在地を取得して一覧を表示中...';
+				getCurrentPosition((position) => {
+					navigateToShelters(position.coords.latitude, position.coords.longitude);
+				}, () => {
+					window.location.assign(allSheltersLink.href);
 				});
 			});
 		}

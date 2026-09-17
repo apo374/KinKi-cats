@@ -48,11 +48,10 @@
               <label for="latitude">緯度</label><input id="latitude" name="latitude" type="number" step="any" min="-90" max="90" value="{{ form_data.latitude if form_data and form_data.latitude is not none else '' }}">
               <label for="longitude">経度</label><input id="longitude" name="longitude" type="number" step="any" min="-180" max="180" value="{{ form_data.longitude if form_data and form_data.longitude is not none else '' }}">
             </div>
-            <div class="field-group"><label for="walking_minutes">徒歩時間（分）</label><input id="walking_minutes" name="walking_minutes" type="number" min="0" step="1" value="{{ form_data.walking_minutes if form_data and form_data.walking_minutes is not none else 0 }}"></div>
           <div class="field-group">
             <label for="status">空き状況</label>
             <select id="status" name="status">
-              {% set statuses = ['未選択', '〇', '△', '×', '空きあり', '残りわずか', '満員'] %}
+              {% set statuses = ['未選択', '〇', '△', '×'] %}
               {% for option in statuses %}
                 <option value="{{ option }}" {% if form_data and form_data.status == option %}selected{% endif %}>{{ option }}</option>
               {% endfor %}
@@ -104,8 +103,10 @@
               <span>ペット受け入れ可</span>
             </label>
           </div>
-            <div class="field-group"><label for="slope">スロープ</label><select id="slope" name="slope"><option>未選択</option><option>あり</option><option>なし</option></select></div>
-            <div class="field-group"><label for="wheelchair_accessible">車いす対応</label><select id="wheelchair_accessible" name="wheelchair_accessible"><option>未選択</option><option>あり</option><option>なし</option></select></div>
+            {% set slope_value = form_data.slope if form_data and form_data.slope is not none else '未選択' %}
+            {% set wheelchair_value = form_data.wheelchair_accessible if form_data and form_data.wheelchair_accessible is not none else '未選択' %}
+            <div class="field-group"><label for="slope">スロープ</label><select id="slope" name="slope"><option value="未選択" {% if slope_value == '未選択' %}selected{% endif %}>未選択</option><option value="あり" {% if slope_value == 'あり' %}selected{% endif %}>あり</option><option value="なし" {% if slope_value == 'なし' %}selected{% endif %}>なし</option></select></div>
+            <div class="field-group"><label for="wheelchair_accessible">車いす対応</label><select id="wheelchair_accessible" name="wheelchair_accessible"><option value="未選択" {% if wheelchair_value == '未選択' %}selected{% endif %}>未選択</option><option value="あり" {% if wheelchair_value == 'あり' %}selected{% endif %}>あり</option><option value="なし" {% if wheelchair_value == 'なし' %}selected{% endif %}>なし</option></select></div>
             <div class="field-group"><label for="image_url">施設写真URL（任意）</label><input id="image_url" name="image_url" type="url" value="{{ form_data.image_url if form_data and form_data.image_url else '' }}"></div>
         </div>
       </div>
@@ -155,7 +156,6 @@
                   <label for="latitude">緯度</label><input id="latitude" name="latitude" type="number" step="any" min="-90" max="90" value="{{ form_data.latitude if form_data and form_data.latitude is not none else selected_shelter.latitude|default('') }}">
                   <label for="longitude">経度</label><input id="longitude" name="longitude" type="number" step="any" min="-180" max="180" value="{{ form_data.longitude if form_data and form_data.longitude is not none else selected_shelter.longitude|default('') }}">
                 </div>
-                <div class="field-group"><label for="walking_minutes">徒歩時間（分）</label><input id="walking_minutes" name="walking_minutes" type="number" min="0" step="1" value="{{ form_data.walking_minutes if form_data and form_data.walking_minutes is not none else selected_shelter.walking_minutes|default(0) }}"></div>
             <div class="field-group">
               <label for="capacity">収容人数</label>
               <input id="capacity" name="capacity" type="number" min="0" step="1" value="{{ form_data.capacity if form_data and form_data.capacity is not none else selected_shelter.capacity|default(0) }}">
@@ -163,7 +163,7 @@
             <div class="field-group">
               <label for="status">空き状況</label>
               <select id="status" name="status">
-                {% set statuses = ['未選択', '〇', '△', '×', '空きあり', '残りわずか', '満員'] %}
+                {% set statuses = ['未選択', '〇', '△', '×'] %}
                 {% for option in statuses %}
                   <option value="{{ option }}" {% if (form_data and form_data.status == option) or (not form_data and selected_shelter and selected_shelter.status == option) %}selected{% endif %}>{{ option }}</option>
                 {% endfor %}
@@ -221,8 +221,10 @@
                 <span>ペット受け入れ可</span>
               </label>
             </div>
-              <div class="field-group"><label for="slope">スロープ</label><select id="slope" name="slope"><option>未選択</option><option>あり</option><option>なし</option></select></div>
-              <div class="field-group"><label for="wheelchair_accessible">車いす対応</label><select id="wheelchair_accessible" name="wheelchair_accessible"><option>未選択</option><option>あり</option><option>なし</option></select></div>
+              {% set slope_value = form_data.slope if form_data and form_data.slope is not none else selected_shelter.slope|default('未選択') %}
+              {% set wheelchair_value = form_data.wheelchair_accessible if form_data and form_data.wheelchair_accessible is not none else selected_shelter.wheelchair_accessible|default('未選択') %}
+              <div class="field-group"><label for="slope">スロープ</label><select id="slope" name="slope"><option value="未選択" {% if slope_value == '未選択' %}selected{% endif %}>未選択</option><option value="あり" {% if slope_value == 'あり' %}selected{% endif %}>あり</option><option value="なし" {% if slope_value == 'なし' %}selected{% endif %}>なし</option></select></div>
+              <div class="field-group"><label for="wheelchair_accessible">車いす対応</label><select id="wheelchair_accessible" name="wheelchair_accessible"><option value="未選択" {% if wheelchair_value == '未選択' %}selected{% endif %}>未選択</option><option value="あり" {% if wheelchair_value == 'あり' %}selected{% endif %}>あり</option><option value="なし" {% if wheelchair_value == 'なし' %}selected{% endif %}>なし</option></select></div>
               <div class="field-group"><label for="image_url">施設写真URL（任意）</label><input id="image_url" name="image_url" type="url" value="{{ form_data.image_url if form_data and form_data.image_url else selected_shelter.image_url|default('') }}"></div>
           </div>
         </div>

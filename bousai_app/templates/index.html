@@ -45,6 +45,7 @@
             </section>
 
             {% set active_notices = resident_notices | rejectattr('status', 'equalto', '解除') | rejectattr('status', 'equalto', '完了') | list %}
+            {% set active_instructions = evacuation_instructions | rejectattr('状況', 'equalto', '解除') | rejectattr('状況', 'equalto', '完了') | list %}
             <section class="home-section home-notices" aria-labelledby="notices-title">
                 <div class="home-section-header">
                     <h2 id="notices-title" class="section-heading">
@@ -58,6 +59,23 @@
                         <p class="notice-text">{{ notice.content }}</p>
                         {% if notice.shelter %}<p class="notice-detail">避難先: {{ notice.shelter }}</p>{% endif %}
                         {% if notice.updated_at or notice.created_at %}<p class="notice-date">{{ notice.updated_at or notice.created_at }} 更新</p>{% endif %}
+                    </li>
+                    {% endfor %}
+                    {% for instruction in active_instructions %}
+                    <li class="notice-item">
+                        <p class="notice-text">避難指示: {{ instruction.get('指示内容', '') }}</p>
+                        {% if instruction.get('対象地域') %}<p class="notice-detail">対象地域: {{ instruction.get('対象地域') }}</p>{% endif %}
+                        {% if instruction.get('発令日時') or instruction.get('状況') %}<p class="notice-date">{{ instruction.get('発令日時', '') }}{% if instruction.get('状況') %} {{ instruction.get('状況') }}{% endif %}</p>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% elif active_instructions %}
+                <ul class="notice-list">
+                    {% for instruction in active_instructions %}
+                    <li class="notice-item">
+                        <p class="notice-text">避難指示: {{ instruction.get('指示内容', '') }}</p>
+                        {% if instruction.get('対象地域') %}<p class="notice-detail">対象地域: {{ instruction.get('対象地域') }}</p>{% endif %}
+                        {% if instruction.get('発令日時') or instruction.get('状況') %}<p class="notice-date">{{ instruction.get('発令日時', '') }}{% if instruction.get('状況') %} {{ instruction.get('状況') }}{% endif %}</p>{% endif %}
                     </li>
                     {% endfor %}
                 </ul>

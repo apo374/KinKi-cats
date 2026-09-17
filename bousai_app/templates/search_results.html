@@ -10,8 +10,7 @@
       {% for key, value in filters.items() %}{% if value %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
       {% if current_lat and current_lng %}<input type="hidden" name="current_lat" value="{{ current_lat }}"><input type="hidden" name="current_lng" value="{{ current_lng }}">{% endif %}
       <span class="sort-label">並び替え</span>
-      <label class="sr-only" for="result-sort">並び替え</label>
-      <select id="result-sort" name="sort" onchange="this.form.submit()">
+      <select id="result-sort" name="sort" aria-label="並び替え" onchange="this.form.submit()">
         <option value="distance" {% if sort == 'distance' %}selected{% endif %}>現在地から近い順</option>
         <option value="capacity" {% if sort == 'capacity' %}selected{% endif %}>収容人数が多い順</option>
       </select>
@@ -20,7 +19,9 @@
 
   {% if error %}<div class="form-status error">{{ error }}</div>{% endif %}
   {% if filters %}
-    <p class="results-summary">検索条件: 建物名「{{ filters.building_name or '指定なし' }}」 / 郵便番号「{{ filters.postal_code or '指定なし' }}」 / 住所「{{ filters.address or '指定なし' }}」</p>
+    <p class="results-summary">
+      検索条件: 建物名「{{ filters.building_name or '指定なし' }}」 / 郵便番号「{{ filters.postal_code or '指定なし' }}」 / 住所「{{ filters.address or '指定なし' }}」{% if filters.pet_allowed %} / ペット受け入れ「{{ '可' if filters.pet_allowed == 'yes' else '不可' }}」{% endif %}{% if filters.barrier_free %} / バリアフリー「{{ '対応あり' if filters.barrier_free == 'yes' else '未対応' }}」{% endif %}
+    </p>
   {% endif %}
   {% if results %}
     <div class="results-table-wrap">

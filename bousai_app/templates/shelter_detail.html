@@ -17,7 +17,7 @@
       <div class="map-fallback-background" aria-hidden="true"></div>
       <p class="map-fallback-message">周辺地図はネットワークに接続できない場合も表示できる簡易地図です。</p>
     </div>
-    <a class="detail-back-link" href="{{ url_for('search_results', current_lat=current_lat, current_lng=current_lng) }}">検索結果へ戻る</a>
+    <a class="secondary-button detail-back-button" href="{{ url_for('search_results', current_lat=current_lat, current_lng=current_lng) }}" aria-label="検索結果へ戻る">&larr; 検索結果へ戻る</a>
   </div>
   <div class="detail-info-column">
     <div class="detail-photo-wrap">
@@ -41,9 +41,14 @@
       <div><dt>バリアフリー</dt><dd>{{ shelter.barrier_free or '未登録' }}</dd></div>
     </dl>
     <p class="detail-note">※空き状況　〇空き20％以上　△空き20%未満　×空き無し</p>
+    {% if request.args.get('registration_error') %}
+      <p class="form-status error" role="alert">{{ request.args.get('registration_error') }}</p>
+    {% endif %}
     <form method="post" action="{{ url_for('register_shelter_use', shelter_id=shelter.id) }}" class="detail-registration-form">
       <input type="hidden" name="current_lat" value="{{ current_lat or '' }}">
       <input type="hidden" name="current_lng" value="{{ current_lng or '' }}">
+      <label for="user-count">利用人数</label>
+      <input id="user-count" name="user_count" type="number" min="1" step="1" value="{{ session.get('registered_shelter_count', 1) if session.get('registered_shelter_id') == shelter.id else 1 }}" required>
       <button type="submit" class="primary-button">利用登録する</button>
     </form>
     {% if session.get('registered_shelter_id') == shelter.id %}
