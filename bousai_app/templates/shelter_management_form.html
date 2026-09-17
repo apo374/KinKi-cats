@@ -33,16 +33,26 @@
           </div>
           <div class="field-group">
             <label for="address">住所</label>
-            <input id="address" name="address" type="text" value="{{ form_data.address if form_data and form_data.address else '' }}">
+            <div class="address-geocode-row">
+              <input id="address" name="address" type="text" value="{{ form_data.address if form_data and form_data.address else '' }}">
+              <button type="button" class="secondary-button" id="geocode-search-btn">座標を取得</button>
+            </div>
+            <select id="geocode-results" class="geocode-results" hidden aria-label="住所候補"></select>
+            <span id="geocode-status" role="status" aria-live="polite"></span>
           </div>
           <div class="field-group">
             <label for="capacity">収容人数</label>
             <input id="capacity" name="capacity" type="number" min="0" step="1" value="{{ form_data.capacity if form_data and form_data.capacity is not none else 0 }}">
           </div>
+            <div class="field-group coordinate-fields">
+              <label for="latitude">緯度</label><input id="latitude" name="latitude" type="number" step="any" min="-90" max="90" value="{{ form_data.latitude if form_data and form_data.latitude is not none else '' }}">
+              <label for="longitude">経度</label><input id="longitude" name="longitude" type="number" step="any" min="-180" max="180" value="{{ form_data.longitude if form_data and form_data.longitude is not none else '' }}">
+            </div>
+            <div class="field-group"><label for="walking_minutes">徒歩時間（分）</label><input id="walking_minutes" name="walking_minutes" type="number" min="0" step="1" value="{{ form_data.walking_minutes if form_data and form_data.walking_minutes is not none else 0 }}"></div>
           <div class="field-group">
             <label for="status">空き状況</label>
             <select id="status" name="status">
-              {% set statuses = ['未選択', '空きあり', '残りわずか', '満員'] %}
+              {% set statuses = ['未選択', '〇', '△', '×', '空きあり', '残りわずか', '満員'] %}
               {% for option in statuses %}
                 <option value="{{ option }}" {% if form_data and form_data.status == option %}selected{% endif %}>{{ option }}</option>
               {% endfor %}
@@ -67,7 +77,11 @@
             <label class="image-preview-label">画像</label>
             <div class="image-preview-box" id="imagePreview">
               {% if form_data and form_data.image %}
-                <img src="{{ form_data.image }}" alt="避難所画像" class="preview-image">
+                {% if form_data.image.startswith('/uploads/') %}
+                  <img src="{{ url_for('static', filename=form_data.image[1:]) }}" alt="避難所画像" class="preview-image">
+                {% else %}
+                  <img src="{{ form_data.image }}" alt="避難所画像" class="preview-image">
+                {% endif %}
               {% else %}
                 <span>画像</span>
               {% endif %}
@@ -90,6 +104,9 @@
               <span>ペット受け入れ可</span>
             </label>
           </div>
+            <div class="field-group"><label for="slope">スロープ</label><select id="slope" name="slope"><option>未選択</option><option>あり</option><option>なし</option></select></div>
+            <div class="field-group"><label for="wheelchair_accessible">車いす対応</label><select id="wheelchair_accessible" name="wheelchair_accessible"><option>未選択</option><option>あり</option><option>なし</option></select></div>
+            <div class="field-group"><label for="image_url">施設写真URL（任意）</label><input id="image_url" name="image_url" type="url" value="{{ form_data.image_url if form_data and form_data.image_url else '' }}"></div>
         </div>
       </div>
       <div class="form-actions">
@@ -127,8 +144,18 @@
             </div>
             <div class="field-group">
               <label for="address">住所</label>
-              <input id="address" name="address" type="text" value="{{ form_data.address if form_data and form_data.address else selected_shelter.address|default('') }}">
+              <div class="address-geocode-row">
+                <input id="address" name="address" type="text" value="{{ form_data.address if form_data and form_data.address else selected_shelter.address|default('') }}">
+                <button type="button" class="secondary-button" id="geocode-search-btn">座標を取得</button>
+              </div>
+              <select id="geocode-results" class="geocode-results" hidden aria-label="住所候補"></select>
+              <span id="geocode-status" role="status" aria-live="polite"></span>
             </div>
+                <div class="field-group coordinate-fields">
+                  <label for="latitude">緯度</label><input id="latitude" name="latitude" type="number" step="any" min="-90" max="90" value="{{ form_data.latitude if form_data and form_data.latitude is not none else selected_shelter.latitude|default('') }}">
+                  <label for="longitude">経度</label><input id="longitude" name="longitude" type="number" step="any" min="-180" max="180" value="{{ form_data.longitude if form_data and form_data.longitude is not none else selected_shelter.longitude|default('') }}">
+                </div>
+                <div class="field-group"><label for="walking_minutes">徒歩時間（分）</label><input id="walking_minutes" name="walking_minutes" type="number" min="0" step="1" value="{{ form_data.walking_minutes if form_data and form_data.walking_minutes is not none else selected_shelter.walking_minutes|default(0) }}"></div>
             <div class="field-group">
               <label for="capacity">収容人数</label>
               <input id="capacity" name="capacity" type="number" min="0" step="1" value="{{ form_data.capacity if form_data and form_data.capacity is not none else selected_shelter.capacity|default(0) }}">
@@ -136,7 +163,7 @@
             <div class="field-group">
               <label for="status">空き状況</label>
               <select id="status" name="status">
-                {% set statuses = ['未選択', '空きあり', '残りわずか', '満員'] %}
+                {% set statuses = ['未選択', '〇', '△', '×', '空きあり', '残りわずか', '満員'] %}
                 {% for option in statuses %}
                   <option value="{{ option }}" {% if (form_data and form_data.status == option) or (not form_data and selected_shelter and selected_shelter.status == option) %}selected{% endif %}>{{ option }}</option>
                 {% endfor %}
@@ -161,9 +188,17 @@
               <label class="image-preview-label">画像</label>
               <div class="image-preview-box" id="imagePreview">
                 {% if form_data and form_data.image %}
-                  <img src="{{ form_data.image }}" alt="避難所画像" class="preview-image">
+                  {% if form_data.image.startswith('/uploads/') %}
+                    <img src="{{ url_for('static', filename=form_data.image[1:]) }}" alt="避難所画像" class="preview-image">
+                  {% else %}
+                    <img src="{{ form_data.image }}" alt="避難所画像" class="preview-image">
+                  {% endif %}
                 {% elif selected_shelter and selected_shelter.image %}
-                  <img src="{{ selected_shelter.image }}" alt="避難所画像" class="preview-image">
+                  {% if selected_shelter.image.startswith('/uploads/') %}
+                    <img src="{{ url_for('static', filename=selected_shelter.image[1:]) }}" alt="避難所画像" class="preview-image">
+                  {% else %}
+                    <img src="{{ selected_shelter.image }}" alt="避難所画像" class="preview-image">
+                  {% endif %}
                 {% else %}
                   <span>画像</span>
                 {% endif %}
@@ -186,6 +221,9 @@
                 <span>ペット受け入れ可</span>
               </label>
             </div>
+              <div class="field-group"><label for="slope">スロープ</label><select id="slope" name="slope"><option>未選択</option><option>あり</option><option>なし</option></select></div>
+              <div class="field-group"><label for="wheelchair_accessible">車いす対応</label><select id="wheelchair_accessible" name="wheelchair_accessible"><option>未選択</option><option>あり</option><option>なし</option></select></div>
+              <div class="field-group"><label for="image_url">施設写真URL（任意）</label><input id="image_url" name="image_url" type="url" value="{{ form_data.image_url if form_data and form_data.image_url else selected_shelter.image_url|default('') }}"></div>
           </div>
         </div>
         <div class="form-actions">
@@ -259,6 +297,64 @@
         .finally(() => {
           this.disabled = false;
         });
+    });
+  }
+
+  const geocodeSearchBtn = document.getElementById('geocode-search-btn');
+  const geocodeResults = document.getElementById('geocode-results');
+  const geocodeStatus = document.getElementById('geocode-status');
+  if (geocodeSearchBtn && geocodeResults) {
+    const latitudeField = document.getElementById('latitude');
+    const longitudeField = document.getElementById('longitude');
+    const addressField = document.getElementById('address');
+
+    const applyGeocodeResult = (result) => {
+      latitudeField.value = result.latitude;
+      longitudeField.value = result.longitude;
+      geocodeStatus.textContent = '緯度・経度を入力しました。';
+    };
+
+    geocodeResults.addEventListener('change', () => {
+      const result = geocodeResults.selectedOptions[0];
+      if (result && result.dataset.latitude && result.dataset.longitude) {
+        applyGeocodeResult(result.dataset);
+      }
+    });
+
+    geocodeSearchBtn.addEventListener('click', async () => {
+      const address = addressField ? addressField.value.trim() : '';
+      if (!address) {
+        geocodeStatus.textContent = '住所を入力してください。';
+        if (addressField) addressField.focus();
+        return;
+      }
+
+      geocodeSearchBtn.disabled = true;
+      geocodeResults.hidden = true;
+      geocodeStatus.textContent = '座標を検索中...';
+      try {
+        const response = await fetch('/api/geocode?q=' + encodeURIComponent(address));
+        const data = await response.json();
+        if (!response.ok || !data.results || !data.results.length) {
+          throw new Error(data.error || '住所から座標を取得できませんでした。');
+        }
+
+        geocodeResults.innerHTML = '';
+        data.results.forEach((result, index) => {
+          const option = document.createElement('option');
+          option.value = index;
+          option.textContent = result.name;
+          option.dataset.latitude = result.latitude;
+          option.dataset.longitude = result.longitude;
+          geocodeResults.appendChild(option);
+        });
+        geocodeResults.hidden = data.results.length < 2;
+        applyGeocodeResult(data.results[0]);
+      } catch (error) {
+        geocodeStatus.textContent = error.message || '住所から座標を取得できませんでした。';
+      } finally {
+        geocodeSearchBtn.disabled = false;
+      }
     });
   }
 

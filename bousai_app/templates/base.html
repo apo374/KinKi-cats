@@ -12,7 +12,7 @@
       <a class="brand" href="{{ url_for('index') }}">防災アプリ</a>
       <nav class="primary-nav" aria-label="主要メニュー">
         <a href="{{ url_for('index') }}"{% if request.endpoint == 'index' %} aria-current="page"{% endif %}>ホーム</a>
-        <a href="{{ url_for('shelter_search') }}"{% if request.endpoint in ('shelter_search', 'all_shelters', 'search_results') %} aria-current="page"{% endif %}>避難所を探す</a>
+        <a href="{{ url_for('shelter_search') }}"{% if request.endpoint in ('shelter_search', 'all_shelters', 'search_results') %} aria-current="page"{% endif %}>避難所検索</a>
       </nav>
       {% if session.logged_in %}
         <button class="menu-button" type="button" aria-expanded="false" aria-controls="adminMenu">

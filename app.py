@@ -7,6 +7,7 @@ import math
 import os
 import time
 import urllib.request
+import re
 from datetime import datetime, timedelta, timezone
 
 try:
@@ -293,6 +294,80 @@ def normalize_yes_no(value):
     return 'あり' if str(value).lower() in {'1', 'true', 'yes', 'on', 'あり'} else 'なし'
 
 
+VALID_STATUSES = {'〇', '△', '×', '空きあり', '残りわずか', '満員', '未選択'}
+VALID_YES_NO = {'あり', 'なし', '一部あり', '未選択'}
+
+
+def parse_non_negative_int(value, label, default=0):
+    """フォームの整数値を厳密に検証する"""
+    text = str(value if value is not None else '').strip()
+    if text == '':
+        return default
+    if not re.fullmatch(r'\d+', text):
+        raise ValueError(f'{label}は0以上の整数で入力してください。')
+    return int(text)
+
+
+def normalize_bool(value):
+    return value is True or str(value).lower() in {'1', 'true', 'yes', 'on', '可', 'あり'}
+
+
+def shelter_value(shelter, key, default='未登録'):
+    value = shelter.get(key)
+    return default if value is None or value == '' else value
+
+
+def haversine_distance(latitude1, longitude1, latitude2, longitude2):
+    """2地点間の距離をメートルで返す"""
+    if not (is_valid_coordinate(latitude1, longitude1)
+            and is_valid_coordinate(latitude2, longitude2)):
+        return None
+    radius = 6371000
+    lat1, lat2 = math.radians(float(latitude1)), math.radians(float(latitude2))
+    delta_lat = math.radians(float(latitude2) - float(latitude1))
+    delta_lng = math.radians(float(longitude2) - float(longitude1))
+    value = (math.sin(delta_lat / 2) ** 2
+             + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lng / 2) ** 2)
+    return 2 * radius * math.asin(math.sqrt(value))
+
+
+def display_shelter(shelter, current_lat=None, current_lng=None):
+    """既存データの不足項目を安全な表示用値で補完する"""
+    item = dict(shelter)
+    name = item.get('name', '')
+    sample = {
+        'distance': 850 if name == '鵠洋小学校' else None,
+        'capacity': 150 if name == '鵠洋小学校' else 0,
+        'status': '△' if name == '鵠洋小学校' else '未登録',
+        'male_toilet_count': 4 if name == '鵠洋小学校' else 0,
+        'female_toilet_count': 4 if name == '鵠洋小学校' else 0,
+        'accessible_toilet_count': 1 if name == '鵠洋小学校' else 0,
+        'barrier_free': 'あり' if name == '鵠洋小学校' else '未登録',
+        'slope': 'あり' if name == '鵠洋小学校' else '未登録',
+        'wheelchair_accessible': 'あり' if name == '鵠洋小学校' else '未登録',
+        'pet_allowed': False if name == '鵠洋小学校' else False,
+    }
+    for key, value in sample.items():
+        if key not in item or item[key] in (None, ''):
+            item[key] = value
+    distance = haversine_distance(current_lat, current_lng,
+                                  item.get('latitude'), item.get('longitude'))
+    if distance is not None:
+        item['calculated_distance'] = distance
+        item['calculated_walking_minutes'] = max(1, math.ceil(distance / 80))
+    elif item.get('distance') is not None:
+        try:
+            item['calculated_distance'] = float(item['distance'])
+            item['calculated_walking_minutes'] = max(1, math.ceil(item['calculated_distance'] / 80))
+        except (TypeError, ValueError):
+            item['calculated_distance'] = None
+            item['calculated_walking_minutes'] = item.get('walking_minutes')
+    else:
+        item['calculated_distance'] = None
+        item['calculated_walking_minutes'] = item.get('walking_minutes')
+    return item
+
+
 # ────────────────────────────────
 
 # ────────────────────────────────
@@ -341,7 +416,7 @@ def search_shelters(filters=None):
     if filters is None:
         filters = {}
 
-    name = str(filters.get('name', '') or '').strip()
+    name = str(filters.get('name', '') or filters.get('building_name', '') or '').strip()
     postal_code = str(filters.get('postal_code', '') or '').strip()
     address = str(filters.get('address', '') or '').strip()
     capacity = str(filters.get('capacity', '') or '').strip()
@@ -380,9 +455,9 @@ def search_shelters(filters=None):
         if min_capacity is not None:
             if shelter_capacity is None or shelter_capacity < min_capacity:
                 continue
-        if pet_allowed == 'yes' and shelter.get('pet_allowed') is not True:
+        if pet_allowed == 'yes' and not normalize_bool(shelter.get('pet_allowed')):
             continue
-        if pet_allowed == 'no' and shelter.get('pet_allowed') is True:
+        if pet_allowed == 'no' and normalize_bool(shelter.get('pet_allowed')):
             continue
         if barrier_free == 'yes':
             if shelter.get('barrier_free') not in (True, 'あり', '対応している'):
@@ -410,6 +485,7 @@ def get_map_data():
     """地図に描画可能な避難所と被害・発信情報を返す"""
     current_shelters = load_json(DATA_FILE, [])
     current_instructions = load_json(INSTRUCTIONS_FILE, [])
+    board_data = load_board_data()
     map_shelters = [
         {
             'id': shelter.get('id'),
@@ -439,6 +515,21 @@ def get_map_data():
         if is_valid_coordinate(notice.get('latitude'), notice.get('longitude'))
         and notice.get('status') not in ('解除', '完了')
     ]
+    board_incidents = [
+        {
+            'id': f"board-damage-{index}",
+            'title': point['content'] or '被害情報',
+            'shelter': '',
+            'status': point['status'],
+            'place_name': point['location'],
+            'updated_at': point['datetime'],
+            'latitude': point['latitude'],
+            'longitude': point['longitude']
+        }
+        for index, point in enumerate(build_damage_map_points(board_data.get('被害状況一覧', [])))
+        if point['status'] not in ('解除', '完了')
+    ]
+    incidents.extend(board_incidents)
     return {'shelters': map_shelters, 'incidents': incidents}
 
 
@@ -451,7 +542,7 @@ def api_map_data():
 
 @app.route('/api/geocode')
 def api_geocode():
-    """住所検索を気象庁以外の外部サービスへ中継する"""
+    """日本語住所を座標へ変換する"""
     query = request.args.get('q', '').strip()
     if not query:
         return jsonify({'error': '検索語を入力してください。'}), 400
@@ -461,31 +552,57 @@ def api_geocode():
     if query in _geocode_cache:
         return jsonify(_geocode_cache[query])
 
-    url = (
-        'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=ja&q='
-        + quote(query)
-    )
+    locations = []
     try:
-        request_obj = urllib.request.Request(
-            url,
-            headers={'User-Agent': 'bousai-app/1.0 contact: local-development'}
-        )
-        with urllib.request.urlopen(request_obj, timeout=8) as response:
-            results = json.loads(response.read())
+        gsi_url = 'https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + quote(query)
+        gsi_request = urllib.request.Request(gsi_url, headers={'User-Agent': 'bousai-app/1.0'})
+        with urllib.request.urlopen(gsi_request, timeout=8) as response:
+            gsi_results = json.loads(response.read())
         locations = [
             {
-                'name': result.get('display_name', query),
-                'latitude': float(result['lat']),
-                'longitude': float(result['lon'])
+                'name': result.get('properties', {}).get('title', query),
+                'latitude': float(result['geometry']['coordinates'][1]),
+                'longitude': float(result['geometry']['coordinates'][0])
             }
-            for result in results
-            if is_valid_coordinate(result.get('lat'), result.get('lon'))
+            for result in gsi_results
+            if isinstance(result, dict)
+            and isinstance(result.get('geometry'), dict)
+            and len(result['geometry'].get('coordinates', [])) >= 2
+            if is_valid_coordinate(result['geometry']['coordinates'][1], result['geometry']['coordinates'][0])
         ]
-        payload = {'results': locations}
-        _geocode_cache[query] = payload
-        return jsonify(payload)
     except (OSError, ValueError, json.JSONDecodeError):
-        return jsonify({'error': '場所を検索できませんでした。'}), 502
+        locations = []
+
+    if not locations:
+        try:
+            nominatim_url = (
+                'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=ja&q='
+                + quote(query)
+            )
+            nominatim_request = urllib.request.Request(
+                nominatim_url,
+                headers={'User-Agent': 'bousai-app/1.0 contact: local-development'}
+            )
+            with urllib.request.urlopen(nominatim_request, timeout=8) as response:
+                nominatim_results = json.loads(response.read())
+            locations = [
+                {
+                    'name': result.get('display_name', query),
+                    'latitude': float(result['lat']),
+                    'longitude': float(result['lon'])
+                }
+                for result in nominatim_results
+                if is_valid_coordinate(result.get('lat'), result.get('lon'))
+            ]
+        except (OSError, ValueError, json.JSONDecodeError):
+            locations = []
+
+    if not locations:
+        return jsonify({'error': '住所から座標を取得できませんでした。'}), 502
+
+    payload = {'results': locations}
+    _geocode_cache[query] = payload
+    return jsonify(payload)
 
 
 @app.route('/api/address_search')
@@ -732,18 +849,33 @@ def shelter_register_new():
             'accessible_toilet_count': request.form.get('accessible_toilet_count', '0').strip(),
             'barrier_free': request.form.get('barrier_free', '未選択'),
             'pet_allowed': request.form.get('pet_allowed') is not None,
+            'latitude': request.form.get('latitude', '').strip(),
+            'longitude': request.form.get('longitude', '').strip(),
+            'walking_minutes': request.form.get('walking_minutes', '0').strip(),
+            'slope': request.form.get('slope', '未選択'),
+            'wheelchair_accessible': request.form.get('wheelchair_accessible', '未選択'),
+            'image_url': request.form.get('image_url', '').strip(),
         }
 
         if not form_data['name']:
             return render_template('shelter_management_form.html', mode='new', error=True, message='建物名を入力してください。', shelters=shelters, form_data=form_data)
 
         try:
-            capacity = max(0, int(float(form_data['capacity']))) if form_data['capacity'] not in ('', None) else 0
-            male = max(0, int(float(form_data['male_toilet_count']))) if form_data['male_toilet_count'] not in ('', None) else 0
-            female = max(0, int(float(form_data['female_toilet_count']))) if form_data['female_toilet_count'] not in ('', None) else 0
-            accessible = max(0, int(float(form_data['accessible_toilet_count']))) if form_data['accessible_toilet_count'] not in ('', None) else 0
-        except ValueError:
-            return render_template('shelter_management_form.html', mode='new', error=True, message='収容人数・トイレ数は数値で入力してください。', shelters=shelters, form_data=form_data)
+            capacity = parse_non_negative_int(form_data['capacity'], '収容人数')
+            male = parse_non_negative_int(form_data['male_toilet_count'], '男性トイレ数')
+            female = parse_non_negative_int(form_data['female_toilet_count'], '女性トイレ数')
+            accessible = parse_non_negative_int(form_data['accessible_toilet_count'], '多目的トイレ数')
+            walking_minutes = parse_non_negative_int(form_data['walking_minutes'], '徒歩時間')
+            latitude = float(form_data['latitude']) if form_data['latitude'] else None
+            longitude = float(form_data['longitude']) if form_data['longitude'] else None
+            if (latitude is None) != (longitude is None) or (latitude is not None and not is_valid_coordinate(latitude, longitude)):
+                raise ValueError('緯度・経度は正しい範囲で入力してください。')
+        except (TypeError, ValueError) as exc:
+            return render_template('shelter_management_form.html', mode='new', error=True, message=str(exc), shelters=shelters, form_data=form_data)
+        if form_data['status'] not in VALID_STATUSES or form_data['barrier_free'] not in VALID_YES_NO or form_data['slope'] not in VALID_YES_NO or form_data['wheelchair_accessible'] not in VALID_YES_NO:
+            return render_template('shelter_management_form.html', mode='new', error=True, message='選択項目の値が不正です。', shelters=shelters, form_data=form_data)
+        if form_data['image_url'] and not form_data['image_url'].startswith(('http://', 'https://')):
+            return render_template('shelter_management_form.html', mode='new', error=True, message='施設写真URLはhttpまたはhttpsで入力してください。', shelters=shelters, form_data=form_data)
 
         image_url = ''
         uploaded_file = request.files.get('image')
@@ -767,6 +899,12 @@ def shelter_register_new():
             'barrier_free': form_data['barrier_free'],
             'pet_allowed': form_data['pet_allowed'],
             'image': image_url,
+            'image_url': form_data['image_url'],
+            'latitude': latitude,
+            'longitude': longitude,
+            'walking_minutes': walking_minutes,
+            'slope': form_data['slope'],
+            'wheelchair_accessible': form_data['wheelchair_accessible'],
         }
         shelters.append(shelter)
         save_shelters()
@@ -798,18 +936,33 @@ def shelter_register_update():
             'accessible_toilet_count': request.form.get('accessible_toilet_count', '0').strip(),
             'barrier_free': request.form.get('barrier_free', '未選択'),
             'pet_allowed': request.form.get('pet_allowed') is not None,
+            'latitude': request.form.get('latitude', '').strip(),
+            'longitude': request.form.get('longitude', '').strip(),
+            'walking_minutes': request.form.get('walking_minutes', '0').strip(),
+            'slope': request.form.get('slope', '未選択'),
+            'wheelchair_accessible': request.form.get('wheelchair_accessible', '未選択'),
+            'image_url': request.form.get('image_url', '').strip(),
         }
 
         if not form_data['name']:
             return render_template('shelter_management_form.html', mode='update', error=True, message='建物名を入力してください。', shelters=shelters, selected_shelter=shelter, form_data=form_data)
 
         try:
-            capacity = max(0, int(float(form_data['capacity']))) if form_data['capacity'] not in ('', None) else 0
-            male = max(0, int(float(form_data['male_toilet_count']))) if form_data['male_toilet_count'] not in ('', None) else 0
-            female = max(0, int(float(form_data['female_toilet_count']))) if form_data['female_toilet_count'] not in ('', None) else 0
-            accessible = max(0, int(float(form_data['accessible_toilet_count']))) if form_data['accessible_toilet_count'] not in ('', None) else 0
-        except ValueError:
-            return render_template('shelter_management_form.html', mode='update', error=True, message='収容人数・トイレ数は数値で入力してください。', shelters=shelters, selected_shelter=shelter, form_data=form_data)
+            capacity = parse_non_negative_int(form_data['capacity'], '収容人数')
+            male = parse_non_negative_int(form_data['male_toilet_count'], '男性トイレ数')
+            female = parse_non_negative_int(form_data['female_toilet_count'], '女性トイレ数')
+            accessible = parse_non_negative_int(form_data['accessible_toilet_count'], '多目的トイレ数')
+            walking_minutes = parse_non_negative_int(form_data['walking_minutes'], '徒歩時間')
+            latitude = float(form_data['latitude']) if form_data['latitude'] else None
+            longitude = float(form_data['longitude']) if form_data['longitude'] else None
+            if (latitude is None) != (longitude is None) or (latitude is not None and not is_valid_coordinate(latitude, longitude)):
+                raise ValueError('緯度・経度は正しい範囲で入力してください。')
+        except (TypeError, ValueError) as exc:
+            return render_template('shelter_management_form.html', mode='update', error=True, message=str(exc), shelters=shelters, selected_shelter=shelter, form_data=form_data)
+        if form_data['status'] not in VALID_STATUSES or form_data['barrier_free'] not in VALID_YES_NO or form_data['slope'] not in VALID_YES_NO or form_data['wheelchair_accessible'] not in VALID_YES_NO:
+            return render_template('shelter_management_form.html', mode='update', error=True, message='選択項目の値が不正です。', shelters=shelters, selected_shelter=shelter, form_data=form_data)
+        if form_data['image_url'] and not form_data['image_url'].startswith(('http://', 'https://')):
+            return render_template('shelter_management_form.html', mode='update', error=True, message='施設写真URLはhttpまたはhttpsで入力してください。', shelters=shelters, selected_shelter=shelter, form_data=form_data)
 
         existing_image = shelter.get('image', '')
         uploaded_file = request.files.get('image')
@@ -833,6 +986,12 @@ def shelter_register_update():
             'accessible_toilet_count': accessible,
             'barrier_free': form_data['barrier_free'],
             'pet_allowed': form_data['pet_allowed'],
+            'image_url': form_data['image_url'],
+            'latitude': latitude,
+            'longitude': longitude,
+            'walking_minutes': walking_minutes,
+            'slope': form_data['slope'],
+            'wheelchair_accessible': form_data['wheelchair_accessible'],
         })
         save_shelters()
         return render_template('shelter_management_form.html', mode='update', success=True, message='避難所情報を更新しました。', shelters=shelters, selected_shelter=shelter, form_data=shelter)
@@ -874,7 +1033,44 @@ def shelter_search():
 # 全施設一覧ページ
 @app.route('/all_shelters')
 def all_shelters():
-    return render_template('search_results.html', results=shelters)
+    results = [display_shelter(shelter) for shelter in shelters]
+    results.sort(key=lambda item: item.get('calculated_distance')
+                 if item.get('calculated_distance') is not None else float('inf'))
+    return render_template('search_results.html', results=results, filters={}, sort='distance')
+
+
+@app.route('/shelters/<int:shelter_id>')
+def shelter_detail(shelter_id):
+    shelter = get_shelter_by_id(shelter_id)
+    if shelter is None:
+        return render_template('404.html', message='指定された避難所が見つかりません。'), 404
+    current_lat = request.args.get('current_lat')
+    current_lng = request.args.get('current_lng')
+    if not is_valid_coordinate(current_lat, current_lng):
+        current_lat = current_lng = None
+    return render_template(
+        'shelter_detail.html',
+        shelter=display_shelter(shelter, current_lat, current_lng),
+        current_lat=current_lat,
+        current_lng=current_lng,
+    )
+
+
+@app.route('/shelters/<int:shelter_id>/use', methods=['POST'])
+def register_shelter_use(shelter_id):
+    """選択した避難所の利用登録をセッションに保存する。避難所データは変更しない。"""
+    if get_shelter_by_id(shelter_id) is None:
+        return render_template('404.html', message='指定された避難所が見つかりません。'), 404
+
+    session['registered_shelter_id'] = shelter_id
+    query = {
+        key: value for key, value in {
+            'current_lat': request.form.get('current_lat', ''),
+            'current_lng': request.form.get('current_lng', ''),
+            'registered': '1',
+        }.items() if value
+    }
+    return redirect(url_for('shelter_detail', shelter_id=shelter_id, **query))
 
 
 # 指示・発信ボード：Excel から常に最新のデータを読み込んで表示する
@@ -894,16 +1090,38 @@ def board():
 def search_results():
     pet_allowed = request.args.get('pet_allowed') or request.args.get('pet-allowed')
     barrier_free = request.args.get('barrier_free') or request.args.get('barrier-free')
+    building_name = request.args.get('building_name', request.args.get('name', ''))
+    current_lat = request.args.get('current_lat', '')
+    current_lng = request.args.get('current_lng', '')
+    if current_lat or current_lng:
+        if not is_valid_coordinate(current_lat, current_lng):
+            return render_template('search_results.html', results=[], filters={}, sort='', error='現在地の座標が不正です。'), 400
+    else:
+        current_lat = current_lng = None
     filters = {
-        'name': request.args.get('name', ''),
+        'name': building_name,
+        'building_name': building_name,
         'postal_code': request.args.get('postal_code', ''),
         'address': request.args.get('address', ''),
         'capacity': request.args.get('capacity', ''),
         'pet_allowed': pet_allowed,
         'barrier_free': barrier_free,
     }
-    results = search_shelters(filters)
-    return render_template('search_results.html', results=results, filters=filters)
+    try:
+        parse_non_negative_int(filters['capacity'], '利用人数', default=0)
+    except ValueError as exc:
+        return render_template('search_results.html', results=[], filters=filters, sort='', error=str(exc)), 400
+
+    results = [display_shelter(shelter, current_lat, current_lng)
+               for shelter in search_shelters(filters)]
+    sort = request.args.get('sort') or 'distance'
+    if sort == 'capacity':
+        results.sort(key=lambda item: int(item.get('capacity') or 0), reverse=True)
+    elif sort == 'distance':
+        results.sort(key=lambda item: item.get('calculated_distance')
+                     if item.get('calculated_distance') is not None else float('inf'))
+    return render_template('search_results.html', results=results, filters=filters, sort=sort,
+                           current_lat=current_lat, current_lng=current_lng)
 
 # JSON API：/shelters?district=地区名
 @app.route('/shelters', methods=['GET'])

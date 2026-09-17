@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ shelter.name or '避難所詳細' }}{% endblock %}
+{% block content %}
+<section class="shelter-detail" data-lat="{{ shelter.latitude if shelter.latitude is not none else '' }}" data-lng="{{ shelter.longitude if shelter.longitude is not none else '' }}" data-current-lat="{{ current_lat or '' }}" data-current-lng="{{ current_lng or '' }}">
+  <div class="detail-map-column">
+    <p class="detail-eyebrow">SHELTER DETAILS</p>
+    <h1>{{ shelter.name or '名称未設定' }}</h1>
+    <div class="detail-distance-row">
+      <p class="detail-distance">{% if shelter.calculated_distance is not none %}現在地から {{ '%.0f'|format(shelter.calculated_distance) }} m{% else %}距離未登録{% endif %}</p>
+      <span class="detail-walking-time">{% if shelter.calculated_walking_minutes %}徒歩 {{ shelter.calculated_walking_minutes }}分{% else %}徒歩時間未登録{% endif %}</span>
+    </div>
+    <div class="location-actions">
+      <button type="button" class="secondary-button" id="detail-location-button">現在地を取得</button>
+      <span id="detail-location-status" role="status" aria-live="polite">{% if current_lat and current_lng %}現在地を表示中{% endif %}</span>
+    </div>
+    <div id="detail-map" class="detail-map" role="img" aria-label="避難所周辺の地図">
+      <div class="map-fallback-background" aria-hidden="true"></div>
+      <p class="map-fallback-message">周辺地図はネットワークに接続できない場合も表示できる簡易地図です。</p>
+    </div>
+    <a class="detail-back-link" href="{{ url_for('search_results', current_lat=current_lat, current_lng=current_lng) }}">検索結果へ戻る</a>
+  </div>
+  <div class="detail-info-column">
+    <div class="detail-photo-wrap">
+      {% set photo = shelter.image or shelter.image_url %}
+      {% if photo %}
+        {% if photo.startswith('/uploads/') %}{% set photo_src = url_for('static', filename=photo[1:]) %}{% else %}{% set photo_src = photo %}{% endif %}
+        <img id="detail-photo" src="{{ photo_src }}" alt="{{ shelter.name }}の施設写真">
+        <div class="photo-fallback photo-load-fallback" hidden>写真を表示できません</div>
+        <button type="button" id="photo-zoom" class="photo-zoom" aria-label="施設写真を拡大">拡大</button>
+      {% else %}<div class="photo-fallback">写真未登録</div>{% endif %}
+    </div>
+    <dl class="detail-meta">
+      <div><dt>収容数</dt><dd>{{ shelter.capacity or 0 }}人</dd></div>
+      <div><dt>空き状況</dt><dd>{{ shelter.status or '未登録' }}</dd></div>
+      <div><dt>男性トイレ</dt><dd>{{ shelter.male_toilet_count or 0 }}個</dd></div>
+      <div><dt>女性トイレ</dt><dd>{{ shelter.female_toilet_count or 0 }}個</dd></div>
+      <div><dt>多目的トイレ</dt><dd>{{ shelter.accessible_toilet_count or 0 }}個</dd></div>
+      <div><dt>スロープ</dt><dd>{{ shelter.slope or '未登録' }}</dd></div>
+      <div><dt>車いす対応</dt><dd>{{ shelter.wheelchair_accessible or '未登録' }}</dd></div>
+      <div><dt>ペット受け入れ</dt><dd>{{ '可' if shelter.pet_allowed else '不可' }}</dd></div>
+      <div><dt>バリアフリー</dt><dd>{{ shelter.barrier_free or '未登録' }}</dd></div>
+    </dl>
+    <p class="detail-note">※空き状況　〇空き20％以上　△空き20%未満　×空き無し</p>
+    <form method="post" action="{{ url_for('register_shelter_use', shelter_id=shelter.id) }}" class="detail-registration-form">
+      <input type="hidden" name="current_lat" value="{{ current_lat or '' }}">
+      <input type="hidden" name="current_lng" value="{{ current_lng or '' }}">
+      <button type="submit" class="primary-button">利用登録する</button>
+    </form>
+    {% if session.get('registered_shelter_id') == shelter.id %}
+      <p class="form-status success" role="status">この避難所を利用登録しました。</p>
+    {% endif %}
+  </div>
+</section>
+<div id="photo-modal" class="photo-modal" hidden role="dialog" aria-modal="true" aria-label="施設写真の拡大表示"><button type="button" id="photo-close" class="photo-close" aria-label="閉じる">閉じる</button><img id="photo-modal-image" alt=""></div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const detail = document.querySelector('.shelter-detail');
+  const mapElement = document.getElementById('detail-map');
+  const lat = Number(detail.dataset.lat), lng = Number(detail.dataset.lng);
+  if (window.L && Number.isFinite(lat) && Number.isFinite(lng)) {
+    const map = L.map(mapElement).setView([lat, lng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      referrerPolicy: 'strict-origin-when-cross-origin'
+    }).addTo(map);
+    const shelterMarker = L.circleMarker([lat, lng], {
+      radius: 9, color: '#145a97', fillColor: '#327dc2', fillOpacity: 0.95, weight: 2
+    }).addTo(map).bindPopup(`避難所：${detail.querySelector('h1').textContent}`).openPopup();
+    const currentLat = Number(detail.dataset.currentLat), currentLng = Number(detail.dataset.currentLng);
+    if (Number.isFinite(currentLat) && Number.isFinite(currentLng)) {
+      const currentLocationLayer = L.layerGroup([
+        L.circle([currentLat, currentLng], {radius: 100, color: '#2363ab', fillOpacity: 0.08, weight: 1}),
+        L.circleMarker([currentLat, currentLng], {radius: 8, color: '#fff', fillColor: '#2363ab', fillOpacity: 1, weight: 3}).bindPopup('現在地（おおよその位置）')
+      ]).addTo(map);
+      map.fitBounds(L.featureGroup([shelterMarker, ...currentLocationLayer.getLayers()]).getBounds().pad(0.35));
+    }
+  }
+  const locationButton = document.getElementById('detail-location-button');
+  const locationStatus = document.getElementById('detail-location-status');
+  if (locationButton && locationStatus) {
+    locationButton.addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        locationStatus.textContent = 'このブラウザでは現在地を取得できません。';
+        return;
+      }
+      locationButton.disabled = true;
+      locationStatus.textContent = '現在地を取得中...';
+      navigator.geolocation.getCurrentPosition((position) => {
+        const query = new URLSearchParams({
+          current_lat: String(position.coords.latitude),
+          current_lng: String(position.coords.longitude)
+        });
+        window.location.assign('{{ url_for("shelter_detail", shelter_id=shelter.id) }}?' + query.toString());
+      }, () => {
+        locationButton.disabled = false;
+        locationStatus.textContent = '現在地を取得できませんでした。';
+      });
+    });
+  }
+  const photo = document.getElementById('detail-photo'), modal = document.getElementById('photo-modal');
+  const photoFallback = document.querySelector('.photo-load-fallback');
+  photo?.addEventListener('error', () => {
+    photo.hidden = true;
+    if (photoFallback) photoFallback.hidden = false;
+    const zoomButton = document.getElementById('photo-zoom');
+    if (zoomButton) zoomButton.hidden = true;
+  });
+  const closeModal = () => { if (modal) modal.hidden = true; };
+  document.getElementById('photo-zoom')?.addEventListener('click', () => { document.getElementById('photo-modal-image').src = photo.src; modal.hidden = false; document.getElementById('photo-close').focus(); });
+  document.getElementById('photo-close')?.addEventListener('click', closeModal);
+  modal?.addEventListener('click', event => { if (event.target === modal) closeModal(); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeModal(); });
+</script>
+{% endblock %}

@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}ページが見つかりません{% endblock %}
+{% block content %}
+<section class="home-section empty-state"><h1>ページが見つかりません</h1><p>{{ message or '指定されたページは見つかりません。' }}</p><a class="link-button" href="{{ url_for('shelter_search') }}">避難所検索へ戻る</a></section>
+{% endblock %}

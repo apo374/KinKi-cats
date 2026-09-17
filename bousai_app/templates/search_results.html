@@ -2,42 +2,52 @@
 
 {% block content %}
 <section class="home-section">
-  <h2 class="section-heading"><span class="heading-label"><span class="heading-icon">🔎</span>避難所検索結果</span></h2>
+  <p class="directory-eyebrow">SHELTER DIRECTORY</p>
+  <div class="directory-heading-row">
+    <h2 class="directory-heading">避難所検索結果表示</h2>
+    {% if results %}<span class="result-count">{{ results|length }}件</span>{% endif %}
+    <form method="get" class="sort-form">
+      {% for key, value in filters.items() %}{% if value %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
+      {% if current_lat and current_lng %}<input type="hidden" name="current_lat" value="{{ current_lat }}"><input type="hidden" name="current_lng" value="{{ current_lng }}">{% endif %}
+      <span class="sort-label">並び替え</span>
+      <label class="sr-only" for="result-sort">並び替え</label>
+      <select id="result-sort" name="sort" onchange="this.form.submit()">
+        <option value="distance" {% if sort == 'distance' %}selected{% endif %}>現在地から近い順</option>
+        <option value="capacity" {% if sort == 'capacity' %}selected{% endif %}>収容人数が多い順</option>
+      </select>
+    </form>
+  </div>
 
+  {% if error %}<div class="form-status error">{{ error }}</div>{% endif %}
+  {% if filters %}
+    <p class="results-summary">検索条件: 建物名「{{ filters.building_name or '指定なし' }}」 / 郵便番号「{{ filters.postal_code or '指定なし' }}」 / 住所「{{ filters.address or '指定なし' }}」</p>
+  {% endif %}
   {% if results %}
-    <p class="results-summary">{{ results|length }}件の避難所が見つかりました。</p>
-    <div class="result-list">
-      {% for shelter in results %}
-        <article class="shelter-card">
-          <div class="shelter-card__header">
-            <h3>{{ shelter.name or '名称未設定' }}</h3>
-            <span class="pill {% if shelter.status == '満員' %}danger{% elif shelter.status == '空きあり' %}success{% else %}neutral{% endif %}">{{ shelter.status or '情報なし' }}</span>
-          </div>
-          <dl class="shelter-meta">
-            <div>
-              <dt>住所</dt>
-              <dd>{{ shelter.address or '未登録' }}</dd>
-            </div>
-            <div>
-              <dt>郵便番号</dt>
-              <dd>{{ shelter.postal_code or '未登録' }}</dd>
-            </div>
-            <div>
-              <dt>収容人数</dt>
-              <dd>{{ shelter.capacity or 0 }}人</dd>
-            </div>
-            <div>
-              <dt>ペット</dt>
-              <dd>{{ '可' if shelter.pet_allowed else '不可' }}</dd>
-            </div>
-            <div>
-              <dt>バリアフリー</dt>
-              <dd>{{ '対応あり' if shelter.barrier_free in ['あり', '対応している', True] else '未対応' }}</dd>
-            </div>
-          </dl>
-        </article>
-      {% endfor %}
+    <div class="results-table-wrap">
+      <table class="results-table">
+        <thead><tr>
+          <th scope="col">施設名</th>
+          <th scope="col">現在地からの距離</th>
+          <th scope="col">空き状況</th>
+          <th scope="col">収容人数</th>
+          <th scope="col">バリアフリー対応</th>
+          <th scope="col">ペット受け入れ可否</th>
+        </tr></thead>
+        <tbody>
+          {% for shelter in results %}
+          <tr>
+            <td><a href="{{ url_for('shelter_detail', shelter_id=shelter.id, current_lat=current_lat, current_lng=current_lng) }}">{{ shelter.name or '名称未設定' }}</a></td>
+            <td>{% if shelter.calculated_distance is not none %}{{ '%.1f'|format(shelter.calculated_distance / 1000) }} km{% else %}距離未登録{% endif %}</td>
+            <td>{{ shelter.status or '未登録' }}</td>
+            <td>{{ shelter.capacity or 0 }}人</td>
+            <td>{{ '〇' if shelter.barrier_free in ['あり', '対応している', True] else '×' }}</td>
+            <td>{{ '〇' if shelter.pet_allowed else '×' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
+    <div class="results-notes"><p>※空き状況　〇空き20％以上　△空き20%未満　×空き無し</p><p>※バリアフリーの詳細は避難所詳細画面をご確認ください</p></div>
   {% else %}
     <div class="empty-state">
       <p>該当する避難所が見つかりませんでした</p>
@@ -47,7 +57,6 @@
 
   <div class="search-actions compact">
     <a class="link-button" href="{{ url_for('shelter_search') }}">検索画面に戻る</a>
-    <a class="link-button" href="{{ url_for('index') }}">トップページへ戻る</a>
   </div>
 </section>
 {% endblock %}
