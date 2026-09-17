@@ -1,14 +1,16 @@
 [
   {
     "id": 1,
-    "name": "テスト避難所",
-    "latitude": 40.82,
-    "longitude": 140.74
-  },
-  {
-    "id": 2,
-    "name": "座標付き避難所",
-    "latitude": 40.8,
-    "longitude": 140.7
+    "name": "松尾",
+    "postal_code": "5150832",
+    "address": "三重県 松阪市 丹生寺町566",
+    "capacity": 0,
+    "status": "未選択",
+    "male_toilet_count": 0,
+    "female_toilet_count": 0,
+    "accessible_toilet_count": 0,
+    "barrier_free": "未選択",
+    "pet_allowed": false,
+    "image": "/uploads/shelters/1789610790813_IMG_1833.jpg"
   }
 ]

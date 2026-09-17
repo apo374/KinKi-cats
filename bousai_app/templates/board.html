@@ -3,23 +3,123 @@
 {% block title %}指示・発信ボード - 防災アプリ{% endblock %}
 
 {% block content %}
-<h2>発信ボード</h2>
-<p>住民向けの発信を登録・確認できます。</p>
+<section class="board-shell">
+  <p class="board-note">※Excelのシート名とヘッダー名は変更しないでください。更新後は画面を再読み込みすると反映されます。</p>
+  <h1 class="board-heading">① 被害状況地図</h1>
+  <div class="board-map-card">
+    <div id="boardMap" class="board-map" aria-label="被害状況地図"></div>
+  </div>
+  {% if board_data['被害状況地図'] %}
+    <div class="board-map-notes">
+      {% for item in board_data['被害状況地図'] %}
+        <p>{{ item.get('地図', '') }}</p>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="board-empty">表示するデータはありません</div>
+  {% endif %}
 
-<!-- 発信一覧 -->
-<h3>発信一覧</h3>
-{% if instructions %}
-<table border="1" cellpadding="5">
-  <tr>
-    <th>内容</th>
-  </tr>
-  {% for inst in instructions %}
-  <tr>
-    <td>{{ inst.content }}{% if inst.shelter %}（避難先: {{ inst.shelter }}）{% endif %}</td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p>登録されている指示はありません。</p>
-{% endif %}
+  <h2 class="board-heading">② 被害状況一覧</h2>
+  {% set damage_rows = board_data['被害状況一覧'] or [] %}
+  {% if damage_rows %}
+    <div class="board-table-wrap">
+      <table class="board-table">
+        <thead>
+          <tr>
+            <th>場所</th>
+            <th>被害内容</th>
+            <th>発生日時</th>
+            <th>状況</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in damage_rows %}
+            <tr>
+              <td>{{ row.get('場所', '') }}</td>
+              <td>{{ row.get('被害内容', '') }}</td>
+              <td>{{ row.get('発生日時', '') }}</td>
+              <td>{{ row.get('状況', '') }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="board-empty">表示するデータはありません</div>
+  {% endif %}
+
+  <h2 class="board-heading">③ 避難指示</h2>
+  {% set instruction_rows = board_data['避難指示'] or [] %}
+  {% if instruction_rows %}
+    <div class="board-table-wrap">
+      <table class="board-table">
+        <thead>
+          <tr>
+            <th>対象地域</th>
+            <th>指示内容</th>
+            <th>発令日時</th>
+            <th>状況</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in instruction_rows %}
+            <tr>
+              <td>{{ row.get('対象地域', '') }}</td>
+              <td>{{ row.get('指示内容', '') }}</td>
+              <td>{{ row.get('発令日時', '') }}</td>
+              <td>{{ row.get('状況', '') }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="board-empty">表示するデータはありません</div>
+  {% endif %}
+
+  <h2 class="board-heading">④ 派遣された職員の一覧</h2>
+  {% set staff_rows = board_data['派遣職員'] or [] %}
+  {% if staff_rows %}
+    <div class="board-table-wrap">
+      <table class="board-table">
+        <thead>
+          <tr>
+            <th>氏名</th>
+            <th>所属</th>
+            <th>派遣先</th>
+            <th>派遣日時</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in staff_rows %}
+            <tr>
+              <td>{{ row.get('氏名', '') }}</td>
+              <td>{{ row.get('所属', '') }}</td>
+              <td>{{ row.get('派遣先', '') }}</td>
+              <td>{{ row.get('派遣日時', '') }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="board-empty">表示するデータはありません</div>
+  {% endif %}
+</section>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const mapCenter = {{ map_center | tojson }};
+  const damagePoints = {{ damage_map_points | tojson }};
+  const boardMap = L.map('boardMap', { zoomControl: true }).setView(mapCenter, 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(boardMap);
+
+  damagePoints.forEach((point) => {
+    const marker = L.marker([point.latitude, point.longitude]).addTo(boardMap);
+    marker.bindPopup(`<strong>${point.location}</strong><br>${point.content}<br>状況: ${point.status}<br>発生日時: ${point.datetime}`);
+  });
+</script>
 {% endblock %}

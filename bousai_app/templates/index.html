@@ -8,7 +8,7 @@
     <div class="home-header">
         <h1 class="home-title">青森市の防災情報</h1>
         <form class="home-refresh-form" action="{{ url_for('index') }}" method="get">
-            <button class="home-refresh-button" type="submit" name="refresh" value="1" aria-label="画面全体を更新">全体更新</button>
+            <button class="home-refresh-button" type="submit" name="refresh" value="1" aria-label="画面全体を更新">↻ 全体更新</button>
         </form>
     </div>
 
@@ -85,7 +85,7 @@
                 <div class="map-filter-row" aria-label="地図の表示切り替え">
                     <label><input id="showShelters" type="checkbox" checked> <span class="map-key map-key-shelter" aria-hidden="true"></span>避難所</label>
                     <label><input id="showIncidents" type="checkbox" checked> <span class="map-key map-key-damage" aria-hidden="true"></span>被害・発信</label>
-                    <button id="mapLocateButton" type="button">現在地</button>
+                    <button id="mapLocateButton" type="button">➤ 現在地</button>
                 </div>
             </div>
             <p id="mapDataStatus" class="map-data-status" role="status" aria-live="polite">登録情報を読み込んでいます...</p>

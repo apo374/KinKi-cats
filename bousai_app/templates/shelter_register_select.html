@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}避難所登録{% endblock %}
+
+{% block content %}
+<section class="management-shell">
+  <h1 class="form-heading">新規登録・更新・削除を選んでください。</h1>
+
+  <div class="management-choice-list" role="list">
+    <div class="management-choice-row" role="listitem">
+      <a class="management-choice-button" href="{{ url_for('shelter_register_new') }}">新規登録</a>
+      <p class="management-choice-text">避難所の新規登録を行う場合はこちら</p>
+    </div>
+    <div class="management-choice-row" role="listitem">
+      <a class="management-choice-button" href="{{ url_for('shelter_register_update') }}">更新</a>
+      <p class="management-choice-text">避難所の更新を行う場合はこちら</p>
+    </div>
+    <div class="management-choice-row" role="listitem">
+      <a class="management-choice-button danger" href="{{ url_for('shelter_register_delete') }}">削除</a>
+      <p class="management-choice-text">登録済みの避難所を削除する場合はこちら</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

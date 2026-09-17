@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}{% if mode == 'new' %}避難所の新規登録{% elif mode == 'update' %}避難所情報の更新{% else %}避難所削除{% endif %}{% endblock %}
+
+{% block content %}
+<section class="management-shell">
+  {% if mode == 'new' %}
+    <h1 class="form-heading">避難所の新規登録</h1>
+  {% elif mode == 'update' %}
+    <h1 class="form-heading">避難所情報の更新</h1>
+  {% else %}
+    <h1 class="form-heading">削除する避難所を選んでください。</h1>
+  {% endif %}
+
+  {% if success or error %}
+    <div class="form-status {% if success %}success{% else %}error{% endif %}">{{ message }}</div>
+  {% endif %}
+
+  {% if mode == 'new' %}
+    <form method="post" enctype="multipart/form-data" class="management-form" novalidate>
+      <div class="form-grid">
+        <div class="form-column">
+          <div class="field-group">
+            <label for="name">建物名</label>
+            <input id="name" name="name" type="text" value="{{ form_data.name if form_data and form_data.name else '' }}" required>
+          </div>
+          <div class="field-group field-inline-group">
+            <label for="postal_code">郵便番号</label>
+            <div class="postal-row">
+              <input id="postal_code" name="postal_code" type="text" inputmode="numeric" value="{{ form_data.postal_code if form_data and form_data.postal_code else '' }}" placeholder="例: 0300801">
+              <button type="button" class="secondary-button" id="postal-search-btn">住所検索</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <label for="address">住所</label>
+            <input id="address" name="address" type="text" value="{{ form_data.address if form_data and form_data.address else '' }}">
+          </div>
+          <div class="field-group">
+            <label for="capacity">収容人数</label>
+            <input id="capacity" name="capacity" type="number" min="0" step="1" value="{{ form_data.capacity if form_data and form_data.capacity is not none else 0 }}">
+          </div>
+          <div class="field-group">
+            <label for="status">空き状況</label>
+            <select id="status" name="status">
+              {% set statuses = ['未選択', '空きあり', '残りわずか', '満員'] %}
+              {% for option in statuses %}
+                <option value="{{ option }}" {% if form_data and form_data.status == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="male_toilet_count">男性トイレの数</label>
+            <input id="male_toilet_count" name="male_toilet_count" type="number" min="0" step="1" value="{{ form_data.male_toilet_count if form_data and form_data.male_toilet_count is not none else 0 }}">
+          </div>
+          <div class="field-group">
+            <label for="female_toilet_count">女性トイレの数</label>
+            <input id="female_toilet_count" name="female_toilet_count" type="number" min="0" step="1" value="{{ form_data.female_toilet_count if form_data and form_data.female_toilet_count is not none else 0 }}">
+          </div>
+          <div class="field-group">
+            <label for="accessible_toilet_count">多目的トイレの数</label>
+            <input id="accessible_toilet_count" name="accessible_toilet_count" type="number" min="0" step="1" value="{{ form_data.accessible_toilet_count if form_data and form_data.accessible_toilet_count is not none else 0 }}">
+          </div>
+        </div>
+
+        <div class="form-column">
+          <div class="field-group image-upload-group">
+            <label class="image-preview-label">画像</label>
+            <div class="image-preview-box" id="imagePreview">
+              {% if form_data and form_data.image %}
+                <img src="{{ form_data.image }}" alt="避難所画像" class="preview-image">
+              {% else %}
+                <span>画像</span>
+              {% endif %}
+            </div>
+            <input id="image" name="image" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp">
+            <div class="file-name" id="imageFileName">{% if form_data and form_data.image %}{{ form_data.image.split('/')[-1] }}{% endif %}</div>
+          </div>
+          <div class="field-group">
+            <label for="barrier_free">バリアフリー対応あり</label>
+            <select id="barrier_free" name="barrier_free">
+              {% set options = ['未選択', 'あり', '一部あり', 'なし'] %}
+              {% for option in options %}
+                <option value="{{ option }}" {% if form_data and form_data.barrier_free == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field-group checkbox-row">
+            <label class="checkbox-label" for="pet_allowed">
+              <input id="pet_allowed" name="pet_allowed" type="checkbox" {% if form_data and form_data.pet_allowed %}checked{% endif %}>
+              <span>ペット受け入れ可</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="primary-button" type="submit">登録</button>
+      </div>
+    </form>
+  {% elif mode == 'update' %}
+    <form method="get" class="management-form narrow-form">
+      <div class="field-group">
+        <label for="shelter_id_select">建物名</label>
+        <select id="shelter_id_select" name="shelter_id" onchange="this.form.submit()">
+          <option value="">選択してください</option>
+          {% for shelter in shelters %}
+            <option value="{{ shelter.id }}" {% if selected_shelter and selected_shelter.id == shelter.id %}selected{% endif %}>{{ shelter.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </form>
+
+    {% if selected_shelter or form_data %}
+      <form method="post" enctype="multipart/form-data" class="management-form" novalidate>
+        <input type="hidden" name="shelter_id" value="{{ selected_shelter.id if selected_shelter else form_data.id }}">
+        <div class="form-grid">
+          <div class="form-column">
+            <div class="field-group">
+              <label for="name">建物名</label>
+              <input id="name" name="name" type="text" value="{{ form_data.name if form_data and form_data.name else selected_shelter.name }}" required>
+            </div>
+            <div class="field-group field-inline-group">
+              <label for="postal_code">郵便番号</label>
+              <div class="postal-row">
+                <input id="postal_code" name="postal_code" type="text" inputmode="numeric" value="{{ form_data.postal_code if form_data and form_data.postal_code else selected_shelter.postal_code|default('') }}" placeholder="例: 0300801">
+                <button type="button" class="secondary-button" id="postal-search-btn">住所検索</button>
+              </div>
+            </div>
+            <div class="field-group">
+              <label for="address">住所</label>
+              <input id="address" name="address" type="text" value="{{ form_data.address if form_data and form_data.address else selected_shelter.address|default('') }}">
+            </div>
+            <div class="field-group">
+              <label for="capacity">収容人数</label>
+              <input id="capacity" name="capacity" type="number" min="0" step="1" value="{{ form_data.capacity if form_data and form_data.capacity is not none else selected_shelter.capacity|default(0) }}">
+            </div>
+            <div class="field-group">
+              <label for="status">空き状況</label>
+              <select id="status" name="status">
+                {% set statuses = ['未選択', '空きあり', '残りわずか', '満員'] %}
+                {% for option in statuses %}
+                  <option value="{{ option }}" {% if (form_data and form_data.status == option) or (not form_data and selected_shelter and selected_shelter.status == option) %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field-group">
+              <label for="male_toilet_count">男性トイレの数</label>
+              <input id="male_toilet_count" name="male_toilet_count" type="number" min="0" step="1" value="{{ form_data.male_toilet_count if form_data and form_data.male_toilet_count is not none else selected_shelter.male_toilet_count|default(0) }}">
+            </div>
+            <div class="field-group">
+              <label for="female_toilet_count">女性トイレの数</label>
+              <input id="female_toilet_count" name="female_toilet_count" type="number" min="0" step="1" value="{{ form_data.female_toilet_count if form_data and form_data.female_toilet_count is not none else selected_shelter.female_toilet_count|default(0) }}">
+            </div>
+            <div class="field-group">
+              <label for="accessible_toilet_count">多目的トイレの数</label>
+              <input id="accessible_toilet_count" name="accessible_toilet_count" type="number" min="0" step="1" value="{{ form_data.accessible_toilet_count if form_data and form_data.accessible_toilet_count is not none else selected_shelter.accessible_toilet_count|default(0) }}">
+            </div>
+          </div>
+
+          <div class="form-column">
+            <div class="field-group image-upload-group">
+              <label class="image-preview-label">画像</label>
+              <div class="image-preview-box" id="imagePreview">
+                {% if form_data and form_data.image %}
+                  <img src="{{ form_data.image }}" alt="避難所画像" class="preview-image">
+                {% elif selected_shelter and selected_shelter.image %}
+                  <img src="{{ selected_shelter.image }}" alt="避難所画像" class="preview-image">
+                {% else %}
+                  <span>画像</span>
+                {% endif %}
+              </div>
+              <input id="image" name="image" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp">
+              <div class="file-name" id="imageFileName">{% if form_data and form_data.image %}{{ form_data.image.split('/')[-1] }}{% elif selected_shelter and selected_shelter.image %}{{ selected_shelter.image.split('/')[-1] }}{% endif %}</div>
+            </div>
+            <div class="field-group">
+              <label for="barrier_free">バリアフリー対応あり</label>
+              <select id="barrier_free" name="barrier_free">
+                {% set options = ['未選択', 'あり', '一部あり', 'なし'] %}
+                {% for option in options %}
+                  <option value="{{ option }}" {% if (form_data and form_data.barrier_free == option) or (not form_data and selected_shelter and selected_shelter.barrier_free == option) %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field-group checkbox-row">
+              <label class="checkbox-label" for="pet_allowed">
+                <input id="pet_allowed" name="pet_allowed" type="checkbox" {% if form_data and form_data.pet_allowed or (not form_data and selected_shelter and selected_shelter.pet_allowed) %}checked{% endif %}>
+                <span>ペット受け入れ可</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="primary-button" type="submit">更新</button>
+        </div>
+      </form>
+    {% endif %}
+  {% elif mode == 'delete' %}
+    <form method="post" class="management-form narrow-form" id="deleteForm">
+      <div class="field-group centered-field">
+        <label for="shelter_id">避難所を選択</label>
+        <select id="shelter_id" name="shelter_id" required>
+          <option value="">選択してください</option>
+          {% for shelter in shelters %}
+            <option value="{{ shelter.id }}">{{ shelter.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="primary-button danger-button" type="submit" {% if not shelters %}disabled{% endif %}>削除</button>
+      </div>
+      <input type="hidden" name="confirm" value="true">
+    </form>
+  {% endif %}
+</section>
+
+<script>
+  const imageInput = document.getElementById('image');
+  if (imageInput) {
+    imageInput.addEventListener('change', function () {
+      const file = this.files && this.files[0];
+      const previewBox = document.getElementById('imagePreview');
+      const fileName = document.getElementById('imageFileName');
+      if (!file) {
+        if (fileName) fileName.textContent = '';
+        return;
+      }
+      if (fileName) fileName.textContent = file.name;
+      if (previewBox) {
+        const reader = new FileReader();
+        reader.onload = function (event) {
+          previewBox.innerHTML = '<img src="' + event.target.result + '" alt="避難所画像" class="preview-image">';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  const postalSearchBtn = document.getElementById('postal-search-btn');
+  if (postalSearchBtn) {
+    postalSearchBtn.addEventListener('click', function () {
+      const zipcodeField = document.getElementById('postal_code');
+      const zip = (zipcodeField ? zipcodeField.value : '').replace(/[^0-9]/g, '');
+      if (zip.length !== 7) {
+        alert('郵便番号を7桁で入力してください。');
+        return;
+      }
+      this.disabled = true;
+      fetch('/api/postal_code_lookup?zipcode=' + encodeURIComponent(zip))
+        .then(response => response.json().then(data => ({status: response.status, data})))
+        .then(({status, data}) => {
+          if (status >= 400) {
+            throw new Error(data.error || '住所検索に失敗しました。');
+          }
+          const addressField = document.getElementById('address');
+          if (addressField) addressField.value = data.address || '';
+        })
+        .catch(error => {
+          alert(error.message || '住所検索に失敗しました。');
+        })
+        .finally(() => {
+          this.disabled = false;
+        });
+    });
+  }
+
+  const deleteForm = document.getElementById('deleteForm');
+  if (deleteForm) {
+    deleteForm.addEventListener('submit', (event) => {
+      const select = document.getElementById('shelter_id');
+      if (!select || !select.value) {
+        event.preventDefault();
+        alert('削除する避難所を選択してください。');
+        return;
+      }
+      if (!window.confirm('選択した避難所を削除します。よろしいですか？')) {
+        event.preventDefault();
+      }
+    });
+  }
+</script>
+{% endblock %}

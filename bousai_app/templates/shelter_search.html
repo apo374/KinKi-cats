@@ -1,8 +1,93 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>避難所検索</h2>
-<p>登録されている避難所を確認できます。</p>
+<section class="home-section">
+	<h2 class="section-heading"><span class="heading-label"><span class="heading-icon">📍</span>避難所検索</span></h2>
+	<p>建物名・住所・郵便番号・定員などの条件で避難所を探せます。</p>
 
-<p><a href="/all_shelters">全施設一覧</a></p>
+	<form action="{{ url_for('search_results') }}" method="get" class="search-form">
+		<div class="search-grid">
+			<label class="field">
+				<span>建物名</span>
+				<input type="text" name="name" placeholder="例：青森市民会館" value="{{ request.args.get('name', '') }}">
+			</label>
+
+			<label class="field">
+				<span>郵便番号</span>
+				<div class="postal-row">
+					<input type="text" name="postal_code" id="postal-code" inputmode="numeric" placeholder="例：0300846" value="{{ request.args.get('postal_code', '') }}">
+					<button type="button" class="secondary-button" id="postal-lookup">住所検索</button>
+				</div>
+			</label>
+
+			<label class="field full-width">
+				<span>住所</span>
+				<input type="text" name="address" id="address-input" placeholder="例：青森市" value="{{ request.args.get('address', '') }}">
+			</label>
+
+			<label class="field">
+				<span>収容人数</span>
+				<input type="number" min="0" name="capacity" placeholder="例：50" value="{{ request.args.get('capacity', '') }}">
+			</label>
+
+			<label class="field">
+				<span>ペット同伴</span>
+				<select name="pet-allowed">
+					<option value="">選択なし</option>
+					<option value="yes" {% if request.args.get('pet_allowed') == 'yes' or request.args.get('pet-allowed') == 'yes' %}selected{% endif %}>可</option>
+					<option value="no" {% if request.args.get('pet_allowed') == 'no' or request.args.get('pet-allowed') == 'no' %}selected{% endif %}>不可</option>
+				</select>
+			</label>
+
+			<label class="field">
+				<span>バリアフリー</span>
+				<select name="barrier_free">
+					<option value="">選択なし</option>
+					<option value="yes" {% if request.args.get('barrier_free') == 'yes' %}selected{% endif %}>対応あり</option>
+					<option value="no" {% if request.args.get('barrier_free') == 'no' %}selected{% endif %}>未対応</option>
+				</select>
+			</label>
+		</div>
+
+		<div class="search-actions">
+			<button type="submit" class="primary-button">検索する</button>
+			<a class="link-button" href="{{ url_for('all_shelters') }}">全施設一覧</a>
+		</div>
+	</form>
+</section>
+
+<script>
+	document.addEventListener('DOMContentLoaded', () => {
+		const postalCodeInput = document.getElementById('postal-code');
+		const addressInput = document.getElementById('address-input');
+		const lookupButton = document.getElementById('postal-lookup');
+
+		if (lookupButton && postalCodeInput && addressInput) {
+			lookupButton.addEventListener('click', async () => {
+				const postalCode = postalCodeInput.value.trim();
+				if (!postalCode) {
+					alert('郵便番号を入力してください。');
+					postalCodeInput.focus();
+					return;
+				}
+
+				lookupButton.disabled = true;
+				lookupButton.textContent = '検索中...';
+				try {
+					const response = await fetch(`/api/address_search?postal_code=${encodeURIComponent(postalCode)}`);
+					const data = await response.json();
+					if (!response.ok || !data.address) {
+						throw new Error(data.error || '住所検索に失敗しました。');
+					}
+					addressInput.value = data.address;
+				} catch (error) {
+					alert(error.message || '住所検索に失敗しました。');
+				} finally {
+					lookupButton.disabled = false;
+					lookupButton.textContent = '住所検索';
+				}
+			});
+		}
+	});
+</script>
 {% endblock %}
